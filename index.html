@@ -1,414 +1,454 @@
-import React, { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { ChevronLeft, ChevronRight, AlertCircle, RefreshCw, Download, CheckCircle2, BookOpen, GraduationCap } from 'lucide-react';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mastering 'Poder' - Spanish II Quiz</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .word-btn { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .word-btn:active { transform: scale(0.95); }
+    </style>
+</head>
+<body class="bg-lime-50 text-slate-800">
+    <div id="root"></div>
 
-// --- APP CONFIG ---
-const QUIZ_TITLE = "Mastering 'Poder' - Spanish II";
+    <script type="text/babel">
+        const { useState, useEffect } = React;
 
-// --- FIREBASE SETUP ---
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'poder-mastery-v4';
+        // --- APP CONFIG ---
+        const QUIZ_TITLE = "Mastering 'Poder' - Spanish II";
+        
+        // Use environment config or fallback to empty for manual setup
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "",
+            authDomain: "",
+            projectId: "",
+            storageBucket: "",
+            messagingSenderId: "",
+            appId: ""
+        };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'poder-github-deploy';
 
-// --- QUIZ CONTENT ---
-const TENSES = {
-  PRESENT: "Indicative Present",
-  PRETERITE: "Indicative Preterite",
-  FUTURE: "Indicative Informal Future",
-  PERFECT: "Indicative Present Perfect"
-};
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
 
-const LEARNING_SLIDES = {
-  [TENSES.PRESENT]: {
-    title: "Poder in the Indicative Present",
-    desc: "The Indicative Present is used to talk about current abilities or facts. To make it negative, place 'no' before the verb. For questions, use the '¿' and '?' punctuation.",
-    examples: [
-      { s: "Puedo hablar español.", t: "Translation: I can speak Spanish." },
-      { s: "No podemos ir.", t: "Translation: We cannot go." },
-      { s: "¿Puedes ayudar?", t: "Translation: Can you help?" }
-    ]
-  },
-  [TENSES.PRETERITE]: {
-    title: "Poder in the Indicative Preterite",
-    desc: "The Preterite is used for past actions that were completed. In this tense, 'pude' usually means 'I managed to' or 'I succeeded in'.",
-    examples: [
-      { s: "Pude terminar la tarea.", t: "Translation: I managed to finish the homework." },
-      { s: "No pudimos ganar.", t: "Translation: We did not manage to win." },
-      { s: "¿Pudiste ver el gato?", t: "Translation: Did you manage to see the cat?" }
-    ]
-  },
-  [TENSES.FUTURE]: {
-    title: "Poder in the Informal Future (Ir + a + Poder)",
-    desc: "This tense uses the construction 'Ir + a + Poder' to say what someone 'is going to be able to' do. Place 'no' before the conjugated form of 'ir' to make it negative.",
-    examples: [
-      { s: "Voy a poder ir.", t: "Translation: I am going to be able to go." },
-      { s: "No van a poder jugar.", t: "Translation: They are not going to be able to play." },
-      { s: "¿Vas a poder ayudar?", t: "Translation: Are you going to be able to help?" }
-    ]
-  },
-  [TENSES.PERFECT]: {
-    title: "Poder in the Present Perfect",
-    desc: "The Present Perfect uses 'Haber + Podido' to connect the past with the present. The participle 'podido' never changes its form.",
-    examples: [
-      { s: "He podido dormir.", t: "Translation: I have been able to sleep." },
-      { s: "No hemos podido viajar.", t: "Translation: We have not been able to travel." },
-      { s: "¿Ha podido él leer?", t: "Translation: Has he been able to read?" }
-    ]
-  }
-};
+        // --- CONTENT ---
+        const TENSES = {
+            PRESENT: "Indicative Present",
+            PRETERITE: "Indicative Preterite",
+            FUTURE: "Indicative Informal Future",
+            PERFECT: "Indicative Present Perfect"
+        };
 
-const QUESTIONS_RAW = [
-  // PRESENT (12)
-  { q: "I can study.", a: ["Yo", "puedo", "estudiar"], alt: ["Puedo", "estudiar"], tense: TENSES.PRESENT, dist: ["podemos", "puedes", "estudiando"] },
-  { q: "You (inf) cannot run.", a: ["Tú", "no", "puedes", "correr"], alt: ["No", "puedes", "correr"], tense: TENSES.PRESENT, dist: ["puedo", "puede", "pudiendo"] },
-  { q: "Can he help?", a: ["¿", "Él", "puede", "ayudar", "?"], alt: ["¿", "Puede", "él", "ayudar", "?"], alt2: ["¿", "Puede", "ayudar", "él", "?"], alt3: ["¿", "Puede", "ayudar", "?"], tense: TENSES.PRESENT, dist: ["pueden", "pude", "ayudado"] },
-  { q: "We can sing.", a: ["Nosotros", "podemos", "cantar"], alt: ["Podemos", "cantar"], tense: TENSES.PRESENT, dist: ["pueden", "puedo", "cantando"] },
-  { q: "They cannot speak.", a: ["Ellos", "no", "pueden", "hablar"], alt: ["No", "pueden", "hablar"], tense: TENSES.PRESENT, dist: ["puede", "podemos", "hablado"] },
-  { q: "Can she dance?", a: ["¿", "Ella", "puede", "bailar", "?"], alt: ["¿", "Puede", "ella", "bailar", "?"], alt2: ["¿", "Puede", "bailar", "ella", "?"], alt3: ["¿", "Puede", "bailar", "?"], tense: TENSES.PRESENT, dist: ["puedes", "pudo", "bailando"] },
-  { q: "You (formal) can wait.", a: ["Usted", "puede", "esperar"], alt: ["Puede", "esperar"], tense: TENSES.PRESENT, dist: ["puedes", "pueden", "esperando"] },
-  { q: "Can you all play?", a: ["¿", "Ustedes", "pueden", "jugar", "?"], alt: ["¿", "Pueden", "ustedes", "jugar", "?"], alt2: ["¿", "Pueden", "jugar", "ustedes", "?"], alt3: ["¿", "Pueden", "jugar", "?"], tense: TENSES.PRESENT, dist: ["puedo", "puede", "jugando"] },
-  { q: "We cannot cook.", a: ["Nosotros", "no", "podemos", "cocinar"], alt: ["No", "podemos", "cocinar"], tense: TENSES.PRESENT, dist: ["pueden", "puedes", "cocinado"] },
-  { q: "I can work.", a: ["Yo", "puedo", "trabajar"], alt: ["Puedo", "trabajar"], tense: TENSES.PRESENT, dist: ["pude", "pudieron", "trabajado"] },
-  { q: "Can they swim?", a: ["¿", "Ellos", "pueden", "nadar", "?"], alt: ["¿", "Pueden", "ellos", "nadar", "?"], alt2: ["¿", "Pueden", "nadar", "ellos", "?"], alt3: ["¿", "Pueden", "nadar", "?"], tense: TENSES.PRESENT, dist: ["pudo", "pude", "nadando"] },
-  { q: "He cannot read.", a: ["Él", "no", "puede", "leer"], alt: ["No", "puede", "leer"], tense: TENSES.PRESENT, dist: ["pueden", "pudo", "leyendo"] },
+        const LEARNING_SLIDES = {
+            [TENSES.PRESENT]: {
+                title: "Poder in the Indicative Present",
+                desc: "The Indicative Present is used for current abilities or general facts. Place 'no' before the verb for negatives. For questions, you can often omit the subject or change its position.",
+                examples: [
+                    { s: "Puedo hablar español.", t: "Translation: I can speak Spanish." },
+                    { s: "No podemos ir.", t: "Translation: We cannot go." },
+                    { s: "¿Puedes ayudar?", t: "Translation: Can you help?" }
+                ]
+            },
+            [TENSES.PRETERITE]: {
+                title: "Poder in the Indicative Preterite",
+                desc: "The Preterite refers to past completed actions. 'Pude' often means 'I managed to' or 'I succeeded in'. Negatives like 'no pude' usually mean 'I failed to'.",
+                examples: [
+                    { s: "Pude terminar la tarea.", t: "Translation: I managed to finish the homework." },
+                    { s: "No pudimos ganar.", t: "Translation: We did not manage to win." },
+                    { s: "¿Pudiste ver el gato?", t: "Translation: Did you manage to see the cat?" }
+                ]
+            },
+            [TENSES.FUTURE]: {
+                title: "Poder in the Informal Future (Ir + a + Poder)",
+                desc: "This construction says what someone 'is going to be able to' do. Negatives place 'no' before the conjugated form of 'ir'.",
+                examples: [
+                    { s: "Voy a poder ir.", t: "Translation: I am going to be able to go." },
+                    { s: "No van a poder jugar.", t: "Translation: They are not going to be able to play." },
+                    { s: "¿Vas a poder ayudar?", t: "Translation: Are you going to be able to help?" }
+                ]
+            },
+            [TENSES.PERFECT]: {
+                title: "Poder in the Present Perfect",
+                desc: "Uses 'Haber + Podido' to connect the past with the present. 'Podido' stays the same for everyone. Negatives put 'no' before the conjugated 'haber'.",
+                examples: [
+                    { s: "He podido dormir.", t: "Translation: I have been able to sleep." },
+                    { s: "No hemos podido viajar.", t: "Translation: We have not been able to travel." },
+                    { s: "¿Ha podido él leer?", t: "Translation: Has he been able to read?" }
+                ]
+            }
+        };
 
-  // PRETERITE (13)
-  { q: "I managed to go.", a: ["Yo", "pude", "ir"], alt: ["Pude", "ir"], tense: TENSES.PRETERITE, dist: ["puedo", "podía", "yendo"] },
-  { q: "You (inf) did not manage to read.", a: ["Tú", "no", "pudiste", "leer"], alt: ["No", "pudiste", "leer"], tense: TENSES.PRETERITE, dist: ["puedes", "pudo", "leyendo"] },
-  { q: "Did she manage to finish?", a: ["¿", "Ella", "pudo", "terminar", "?"], alt: ["¿", "Pudo", "ella", "terminar", "?"], alt2: ["¿", "Pudo", "terminar", "ella", "?"], alt3: ["¿", "Pudo", "terminar", "?"], tense: TENSES.PRETERITE, dist: ["pude", "pudieron", "terminando"] },
-  { q: "We managed to win.", a: ["Nosotros", "pudimos", "ganar"], alt: ["Pudimos", "ganar"], tense: TENSES.PRETERITE, dist: ["pueden", "podemos", "ganado"] },
-  { q: "They did not manage to see.", a: ["Ellos", "no", "pudieron", "ver"], alt: ["No", "pudieron", "ver"], tense: TENSES.PRETERITE, dist: ["pudo", "pude", "visto"] },
-  { q: "Did you (formal) manage to arrive?", a: ["¿", "Usted", "pudo", "llegar", "?"], alt: ["¿", "Pudo", "usted", "llegar", "?"], alt2: ["¿", "Pudo", "llegar", "usted", "?"], alt3: ["¿", "Pudo", "llegar", "?"], tense: TENSES.PRETERITE, dist: ["puedes", "pudiste", "llegando"] },
-  { q: "He managed to understand.", a: ["Él", "pudo", "entender"], alt: ["Pudo", "entender"], tense: TENSES.PRETERITE, dist: ["pude", "puedo", "entendido"] },
-  { q: "I did not manage to eat.", a: ["Yo", "no", "pude", "comer"], alt: ["No", "pude", "comer"], tense: TENSES.PRETERITE, dist: ["puedo", "podemos", "comido"] },
-  { q: "Did we manage to swim?", a: ["¿", "Nosotros", "pudimos", "nadar", "?"], alt: ["¿", "Pudimos", "nosotros", "nadar", "?"], alt2: ["¿", "Pudimos", "nadar", "nosotros", "?"], alt3: ["¿", "Pudimos", "nadar", "?"], tense: TENSES.PRETERITE, dist: ["pudo", "pueden", "nadando"] },
-  { q: "They managed to hear.", a: ["Ellos", "pudieron", "oír"], alt: ["Pudieron", "oír"], tense: TENSES.PRETERITE, dist: ["pudo", "pudimos", "oyendo"] },
-  { q: "Did you (inf) manage to dance?", a: ["¿", "Tú", "pudiste", "bailar", "?"], alt: ["¿", "Pudiste", "tú", "bailar", "?"], alt2: ["¿", "Pudiste", "bailar", "tú", "?"], alt3: ["¿", "Pudiste", "bailar", "?"], tense: TENSES.PRETERITE, dist: ["puedes", "pudo", "bailando"] },
-  { q: "She did not manage to wait.", a: ["Ella", "no", "pudo", "esperar"], alt: ["No", "pudo", "esperar"], tense: TENSES.PRETERITE, dist: ["pude", "pudiste", "esperado"] },
-  { q: "We managed to talk.", a: ["Nosotros", "pudimos", "hablar"], alt: ["Pudimos", "hablar"], tense: TENSES.PRETERITE, dist: ["puden", "pudo", "hablando"] },
+        const QUESTIONS_RAW = [
+            // Present (12)
+            { q: "I can study.", a: ["Yo", "puedo", "estudiar"], alt: ["Puedo", "estudiar"], tense: TENSES.PRESENT, dist: ["podemos", "puedes", "estudiando"] },
+            { q: "You (inf) cannot run.", a: ["Tú", "no", "puedes", "correr"], alt: ["No", "puedes", "correr"], tense: TENSES.PRESENT, dist: ["puedo", "puede", "pudiendo"] },
+            { q: "Can he help?", a: ["¿", "Él", "puede", "ayudar", "?"], alt: ["¿", "Puede", "él", "ayudar", "?"], alt2: ["¿", "Puede", "ayudar", "él", "?"], alt3: ["¿", "Puede", "ayudar", "?"], tense: TENSES.PRESENT, dist: ["pueden", "pude", "ayudado"] },
+            { q: "We can sing.", a: ["Nosotros", "podemos", "cantar"], alt: ["Podemos", "cantar"], tense: TENSES.PRESENT, dist: ["pueden", "puedo", "cantando"] },
+            { q: "They cannot speak.", a: ["Ellos", "no", "pueden", "hablar"], alt: ["No", "pueden", "hablar"], tense: TENSES.PRESENT, dist: ["puede", "podemos", "hablado"] },
+            { q: "Can she dance?", a: ["¿", "Ella", "puede", "bailar", "?"], alt: ["¿", "Puede", "ella", "bailar", "?"], alt2: ["¿", "Puede", "bailar", "ella", "?"], alt3: ["¿", "Puede", "bailar", "?"], tense: TENSES.PRESENT, dist: ["puedes", "pudo", "bailando"] },
+            { q: "You (formal) can wait.", a: ["Usted", "puede", "esperar"], alt: ["Puede", "esperar"], tense: TENSES.PRESENT, dist: ["puedes", "pueden", "esperando"] },
+            { q: "Can you all play?", a: ["¿", "Ustedes", "pueden", "jugar", "?"], alt: ["¿", "Pueden", "ustedes", "jugar", "?"], alt2: ["¿", "Pueden", "jugar", "ustedes", "?"], alt3: ["¿", "Pueden", "jugar", "?"], tense: TENSES.PRESENT, dist: ["puedo", "puede", "jugando"] },
+            { q: "We cannot cook.", a: ["Nosotros", "no", "podemos", "cocinar"], alt: ["No", "podemos", "cocinar"], tense: TENSES.PRESENT, dist: ["pueden", "puedes", "cocinado"] },
+            { q: "I can work.", a: ["Yo", "puedo", "trabajar"], alt: ["Puedo", "trabajar"], tense: TENSES.PRESENT, dist: ["pude", "pudieron", "trabajado"] },
+            { q: "Can they swim?", a: ["¿", "Ellos", "pueden", "nadar", "?"], alt: ["¿", "Pueden", "ellos", "nadar", "?"], alt2: ["¿", "Pueden", "nadar", "ellos", "?"], alt3: ["¿", "Pueden", "nadar", "?"], tense: TENSES.PRESENT, dist: ["pudo", "pude", "nadando"] },
+            { q: "He cannot read.", a: ["Él", "no", "puede", "leer"], alt: ["No", "puede", "leer"], tense: TENSES.PRESENT, dist: ["pueden", "pudo", "leyendo"] },
 
-  // FUTURE (12)
-  { q: "I am going to be able to go.", a: ["Yo", "voy", "a", "poder", "ir"], alt: ["Voy", "a", "poder", "ir"], tense: TENSES.FUTURE, dist: ["puedo", "vas", "ido"] },
-  { q: "You (inf) are not going to be able to talk.", a: ["Tú", "no", "vas", "a", "poder", "hablar"], alt: ["No", "vas", "a", "poder", "hablar"], tense: TENSES.FUTURE, dist: ["va", "voy", "hablado"] },
-  { q: "Is he going to be able to run?", a: ["¿", "Él", "va", "a", "poder", "correr", "?"], alt: ["¿", "Va", "él", "a", "poder", "correr", "?"], alt2: ["¿", "Va", "a", "poder", "correr", "él", "?"], alt3: ["¿", "Va", "a", "poder", "correr", "?"], tense: TENSES.FUTURE, dist: ["vamos", "pude", "corriendo"] },
-  { q: "We are going to be able to study.", a: ["Nosotros", "vamos", "a", "poder", "estudiar"], alt: ["Vamos", "a", "poder", "estudiar"], tense: TENSES.FUTURE, dist: ["van", "puedo", "estudiando"] },
-  { q: "They are not going to be able to finish.", a: ["Ellos", "no", "van", "a", "poder", "terminar"], alt: ["No", "van", "a", "poder", "terminar"], tense: TENSES.FUTURE, dist: ["vas", "pudieron", "terminado"] },
-  { q: "Is she going to be able to start?", a: ["¿", "Ella", "va", "a", "poder", "empezar", "?"], alt: ["¿", "Va", "ella", "a", "poder", "empezar", "?"], alt2: ["¿", "Va", "a", "poder", "empezar", "ella", "?"], alt3: ["¿", "Va", "a", "poder", "empezar", "?"], tense: TENSES.FUTURE, dist: ["voy", "puedes", "empezado"] },
-  { q: "You (formal) are going to be able to win.", a: ["Usted", "va", "a", "poder", "ganar"], alt: ["Va", "a", "poder", "ganar"], tense: TENSES.FUTURE, dist: ["van", "vas", "ganando"] },
-  { q: "Are you all going to be able to fly?", a: ["¿", "Ustedes", "van", "a", "poder", "volar", "?"], alt: ["¿", "Van", "ustedes", "a", "poder", "volar", "?"], alt2: ["¿", "Van", "a", "poder", "volar", "ustedes", "?"], alt3: ["¿", "Van", "a", "poder", "volar", "?"], tense: TENSES.FUTURE, dist: ["vamos", "pudo", "volado"] },
-  { q: "We are not going to be able to clean.", a: ["Nosotros", "no", "vamos", "a", "poder", "limpiar"], alt: ["No", "vamos", "a", "poder", "limpiar"], tense: TENSES.FUTURE, dist: ["van", "pude", "limpiado"] },
-  { q: "I am going to be able to rest.", a: ["Yo", "voy", "a", "poder", "descansar"], alt: ["Voy", "a", "poder", "descansar"], tense: TENSES.FUTURE, dist: ["vas", "puedo", "descansado"] },
-  { q: "Are they going to be able to play?", a: ["¿", "Ellos", "van", "a", "poder", "jugar", "?"], alt: ["¿", "Van", "ellos", "a", "poder", "jugar", "?"], alt2: ["¿", "Van", "a", "poder", "jugar", "ellos", "?"], alt3: ["¿", "Van", "a", "poder", "jugar", "?"], tense: TENSES.FUTURE, dist: ["vamos", "pudo", "jugando"] },
-  { q: "He is not going to be able to help.", a: ["Él", "no", "va", "a", "poder", "ayudar"], alt: ["No", "va", "a", "poder", "ayudar"], tense: TENSES.FUTURE, dist: ["voy", "pudiste", "ayudado"] },
+            // Preterite (13)
+            { q: "I managed to go.", a: ["Yo", "pude", "ir"], alt: ["Pude", "ir"], tense: TENSES.PRETERITE, dist: ["puedo", "podía", "yendo"] },
+            { q: "You (inf) did not manage to read.", a: ["Tú", "no", "pudiste", "leer"], alt: ["No", "pudiste", "leer"], tense: TENSES.PRETERITE, dist: ["puedes", "pudo", "leyendo"] },
+            { q: "Did she manage to finish?", a: ["¿", "Ella", "pudo", "terminar", "?"], alt: ["¿", "Pudo", "ella", "terminar", "?"], alt2: ["¿", "Pudo", "terminar", "ella", "?"], alt3: ["¿", "Pudo", "terminar", "?"], tense: TENSES.PRETERITE, dist: ["pude", "pudieron", "terminando"] },
+            { q: "We managed to win.", a: ["Nosotros", "pudimos", "ganar"], alt: ["Pudimos", "ganar"], tense: TENSES.PRETERITE, dist: ["pueden", "podemos", "ganado"] },
+            { q: "They did not manage to see.", a: ["Ellos", "no", "pudieron", "ver"], alt: ["No", "pudieron", "ver"], tense: TENSES.PRETERITE, dist: ["pudo", "pude", "visto"] },
+            { q: "Did you (formal) manage to arrive?", a: ["¿", "Usted", "pudo", "llegar", "?"], alt: ["¿", "Pudo", "usted", "llegar", "?"], alt2: ["¿", "Pudo", "llegar", "usted", "?"], alt3: ["¿", "Pudo", "llegar", "?"], tense: TENSES.PRETERITE, dist: ["puedes", "pudiste", "llegando"] },
+            { q: "He managed to understand.", a: ["Él", "pudo", "entender"], alt: ["Pudo", "entender"], tense: TENSES.PRETERITE, dist: ["pude", "puedo", "entendido"] },
+            { q: "I did not manage to eat.", a: ["Yo", "no", "pude", "comer"], alt: ["No", "pude", "comer"], tense: TENSES.PRETERITE, dist: ["puedo", "podemos", "comido"] },
+            { q: "Did we manage to swim?", a: ["¿", "Nosotros", "pudimos", "nadar", "?"], alt: ["¿", "Pudimos", "nosotros", "nadar", "?"], alt2: ["¿", "Pudimos", "nadar", "nosotros", "?"], alt3: ["¿", "Pudimos", "nadar", "?"], tense: TENSES.PRETERITE, dist: ["pudo", "pueden", "nadando"] },
+            { q: "They managed to hear.", a: ["Ellos", "pudieron", "oír"], alt: ["Pudieron", "oír"], tense: TENSES.PRETERITE, dist: ["pudo", "pudimos", "oyendo"] },
+            { q: "Did you (inf) manage to dance?", a: ["¿", "Tú", "pudiste", "bailar", "?"], alt: ["¿", "Pudiste", "tú", "bailar", "?"], alt2: ["¿", "Pudiste", "bailar", "tú", "?"], alt3: ["¿", "Pudiste", "bailar", "?"], tense: TENSES.PRETERITE, dist: ["puedes", "pudo", "bailando"] },
+            { q: "She did not manage to wait.", a: ["Ella", "no", "pudo", "esperar"], alt: ["No", "pudo", "esperar"], tense: TENSES.PRETERITE, dist: ["pude", "pudiste", "esperado"] },
+            { q: "We managed to talk.", a: ["Nosotros", "pudimos", "hablar"], alt: ["Pudimos", "hablar"], tense: TENSES.PRETERITE, dist: ["puden", "pudo", "hablando"] },
 
-  // PERFECT (13)
-  { q: "I have been able to help.", a: ["Yo", "he", "podido", "ayudar"], alt: ["He", "podido", "ayudar"], tense: TENSES.PERFECT, dist: ["ha", "pude", "ayudado"] },
-  { q: "You (inf) have not been able to sleep.", a: ["Tú", "no", "has", "podido", "dormir"], alt: ["No", "has", "podido", "dormir"], tense: TENSES.PERFECT, dist: ["hemos", "puedes", "duerme"] },
-  { q: "Has he been able to read?", a: ["¿", "Él", "ha", "podido", "leer", "?"], alt: ["¿", "Ha", "él", "podido", "leer", "?"], alt2: ["¿", "Ha", "podido", "leer", "él", "?"], alt3: ["¿", "Ha", "podido", "leer", "?"], tense: TENSES.PERFECT, dist: ["han", "pude", "leyendo"] },
-  { q: "We have been able to arrive.", a: ["Nosotros", "hemos", "podido", "llegar"], alt: ["Hemos", "podido", "llegar"], tense: TENSES.PERFECT, dist: ["ha", "podemos", "llegado"] },
-  { q: "They have not been able to find.", a: ["Ellos", "no", "han", "podido", "encontrar"], alt: ["No", "han", "podido", "encontrar"], tense: TENSES.PERFECT, dist: ["he", "pudieron", "encontrado"] },
-  { q: "Has she been able to choose?", a: ["¿", "Ella", "ha", "podido", "elegir", "?"], alt: ["¿", "Ha", "ella", "podido", "elegir", "?"], alt2: ["¿", "Ha", "podido", "elegir", "ella", "?"], alt3: ["¿", "Ha", "podido", "elegir", "?"], tense: TENSES.PERFECT, dist: ["has", "puedo", "elegido"] },
-  { q: "You (formal) have been able to wait.", a: ["Usted", "ha", "podido", "esperar"], alt: ["Ha", "podido", "esperar"], tense: TENSES.PERFECT, dist: ["han", "hemos", "esperando"] },
-  { q: "Have you all been able to jump?", a: ["¿", "Ustedes", "han", "podido", "saltar", "?"], alt: ["¿", "Han", "ustedes", "podido", "saltar", "?"], alt2: ["¿", "Han", "podido", "saltar", "ustedes", "?"], alt3: ["¿", "Han", "podido", "saltar", "?"], tense: TENSES.PERFECT, dist: ["has", "pudo", "saltado"] },
-  { q: "We have not been able to understand.", a: ["Nosotros", "no", "hemos", "podido", "entender"], alt: ["No", "hemos", "podido", "entender"], tense: TENSES.PERFECT, dist: ["ha", "pueden", "entendido"] },
-  { q: "I have been able to dream.", a: ["Yo", "he", "podido", "soñar"], alt: ["He", "podido", "soñar"], tense: TENSES.PERFECT, dist: ["has", "pudimos", "soñado"] },
-  { q: "Have they been able to stay?", a: ["¿", "Ellos", "han", "podido", "quedarse", "?"], alt: ["¿", "Han", "ellos", "podido", "quedarse", "?"], alt2: ["¿", "Han", "podido", "quedarse", "ellos", "?"], alt3: ["¿", "Han", "podido", "quedarse", "?"], tense: TENSES.PERFECT, dist: ["hemos", "puedo", "quedado"] },
-  { q: "She has not been able to cook.", a: ["Ella", "no", "ha", "podido", "cocinar"], alt: ["No", "ha", "podido", "cocinar"], tense: TENSES.PERFECT, dist: ["han", "pude", "cocinando"] },
-  { q: "Have you (inf) been able to eat?", a: ["¿", "Tú", "has", "podido", "comer", "?"], alt: ["¿", "Has", "tú", "podido", "comer", "?"], alt2: ["¿", "Has", "podido", "comer", "tú", "?"], alt3: ["¿", "Has", "podido", "comer", "?"], tense: TENSES.PERFECT, dist: ["he", "puede", "comido"] }
-].map((item, idx) => ({
-  id: idx,
-  ...item,
-  shuffledWords: Array.from(new Set([...item.a, ...(item.alt || []), ...(item.alt2 || []), ...(item.alt3 || []), ...item.dist])).sort(() => Math.random() - 0.5)
-}));
+            // Future (12)
+            { q: "I am going to be able to go.", a: ["Yo", "voy", "a", "poder", "ir"], alt: ["Voy", "a", "poder", "ir"], tense: TENSES.FUTURE, dist: ["puedo", "vas", "ido"] },
+            { q: "You (inf) are not going to be able to talk.", a: ["Tú", "no", "vas", "a", "poder", "hablar"], alt: ["No", "vas", "a", "poder", "hablar"], tense: TENSES.FUTURE, dist: ["va", "voy", "hablado"] },
+            { q: "Is he going to be able to run?", a: ["¿", "Él", "va", "a", "poder", "correr", "?"], alt: ["¿", "Va", "él", "a", "poder", "correr", "?"], alt2: ["¿", "Va", "a", "poder", "correr", "él", "?"], alt3: ["¿", "Va", "a", "poder", "correr", "?"], tense: TENSES.FUTURE, dist: ["vamos", "pude", "corriendo"] },
+            { q: "We are going to be able to study.", a: ["Nosotros", "vamos", "a", "poder", "estudiar"], alt: ["Vamos", "a", "poder", "estudiar"], tense: TENSES.FUTURE, dist: ["van", "puedo", "estudiando"] },
+            { q: "They are not going to be able to finish.", a: ["Ellos", "no", "van", "a", "poder", "terminar"], alt: ["No", "van", "a", "poder", "terminar"], tense: TENSES.FUTURE, dist: ["vas", "pudieron", "terminado"] },
+            { q: "Is she going to be able to start?", a: ["¿", "Ella", "va", "a", "poder", "empezar", "?"], alt: ["¿", "Va", "ella", "a", "poder", "empezar", "?"], alt2: ["¿", "Va", "a", "poder", "empezar", "ella", "?"], alt3: ["¿", "Va", "a", "poder", "empezar", "?"], tense: TENSES.FUTURE, dist: ["voy", "puedes", "empezado"] },
+            { q: "You (formal) are going to be able to win.", a: ["Usted", "va", "a", "poder", "ganar"], alt: ["Va", "a", "poder", "ganar"], tense: TENSES.FUTURE, dist: ["van", "vas", "ganando"] },
+            { q: "Are you all going to be able to fly?", a: ["¿", "Ustedes", "van", "a", "poder", "volar", "?"], alt: ["¿", "Van", "ustedes", "a", "poder", "volar", "?"], alt2: ["¿", "Van", "a", "poder", "volar", "ustedes", "?"], alt3: ["¿", "Van", "a", "poder", "volar", "?"], tense: TENSES.FUTURE, dist: ["vamos", "pudo", "volado"] },
+            { q: "We are not going to be able to clean.", a: ["Nosotros", "no", "vamos", "a", "poder", "limpiar"], alt: ["No", "vamos", "a", "poder", "limpiar"], tense: TENSES.FUTURE, dist: ["van", "pude", "limpiado"] },
+            { q: "I am going to be able to rest.", a: ["Yo", "voy", "a", "poder", "descansar"], alt: ["Voy", "a", "poder", "descansar"], tense: TENSES.FUTURE, dist: ["vas", "puedo", "descansado"] },
+            { q: "Are they going to be able to play?", a: ["¿", "Ellos", "van", "a", "poder", "jugar", "?"], alt: ["¿", "Van", "ellos", "a", "poder", "jugar", "?"], alt2: ["¿", "Van", "a", "poder", "jugar", "ellos", "?"], alt3: ["¿", "Van", "a", "poder", "jugar", "?"], tense: TENSES.FUTURE, dist: ["vamos", "pudo", "jugando"] },
+            { q: "He is not going to be able to help.", a: ["Él", "no", "va", "a", "poder", "ayudar"], alt: ["No", "va", "a", "poder", "ayudar"], tense: TENSES.FUTURE, dist: ["voy", "pudiste", "ayudado"] },
 
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [step, setStep] = useState('auth'); 
-  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', period: '' });
-  const [currentIdx, setCurrentIdx] = useState(0);
-  const [responses, setResponses] = useState({}); 
-  const [cheatCount, setCheatCount] = useState(0);
-  const [showAlert, setShowAlert] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [lastViewedTense, setLastViewedTense] = useState(null);
+            // Perfect (13)
+            { q: "I have been able to help.", a: ["Yo", "he", "podido", "ayudar"], alt: ["He", "podido", "ayudar"], tense: TENSES.PERFECT, dist: ["ha", "pude", "ayudado"] },
+            { q: "You (inf) have not been able to sleep.", a: ["Tú", "no", "has", "podido", "dormir"], alt: ["No", "has", "podido", "dormir"], tense: TENSES.PERFECT, dist: ["hemos", "puedes", "duerme"] },
+            { q: "Has he been able to read?", a: ["¿", "Él", "ha", "podido", "leer", "?"], alt: ["¿", "Ha", "él", "podido", "leer", "?"], alt2: ["¿", "Ha", "podido", "leer", "él", "?"], alt3: ["¿", "Ha", "podido", "leer", "?"], tense: TENSES.PERFECT, dist: ["han", "pude", "leyendo"] },
+            { q: "We have been able to arrive.", a: ["Nosotros", "hemos", "podido", "llegar"], alt: ["Hemos", "podido", "llegar"], tense: TENSES.PERFECT, dist: ["ha", "podemos", "llegado"] },
+            { q: "They have not been able to find.", a: ["Ellos", "no", "han", "podido", "encontrar"], alt: ["No", "han", "podido", "encontrar"], tense: TENSES.PERFECT, dist: ["he", "pudieron", "encontrado"] },
+            { q: "Has she been able to choose?", a: ["¿", "Ella", "ha", "podido", "elegir", "?"], alt: ["¿", "Ha", "ella", "podido", "elegir", "?"], alt2: ["¿", "Ha", "podido", "elegir", "ella", "?"], alt3: ["¿", "Ha", "podido", "elegir", "?"], tense: TENSES.PERFECT, dist: ["has", "puedo", "elegido"] },
+            { q: "You (formal) have been able to wait.", a: ["Usted", "ha", "podido", "esperar"], alt: ["Ha", "podido", "esperar"], tense: TENSES.PERFECT, dist: ["han", "hemos", "esperando"] },
+            { q: "Have you all been able to jump?", a: ["¿", "Ustedes", "han", "podido", "saltar", "?"], alt: ["¿", "Han", "ustedes", "podido", "saltar", "?"], alt2: ["¿", "Han", "podido", "saltar", "ustedes", "?"], alt3: ["¿", "Han", "podido", "saltar", "?"], tense: TENSES.PERFECT, dist: ["has", "pudo", "saltado"] },
+            { q: "We have not been able to understand.", a: ["Nosotros", "no", "hemos", "podido", "entender"], alt: ["No", "hemos", "podido", "entender"], tense: TENSES.PERFECT, dist: ["ha", "pueden", "entendido"] },
+            { q: "I have been able to dream.", a: ["Yo", "he", "podido", "soñar"], alt: ["He", "podido", "soñar"], tense: TENSES.PERFECT, dist: ["has", "pudimos", "soñado"] },
+            { q: "Have they been able to stay?", a: ["¿", "Ellos", "han", "podido", "quedarse", "?"], alt: ["¿", "Han", "ellos", "podido", "quedarse", "?"], alt2: ["¿", "Han", "podido", "quedarse", "ellos", "?"], alt3: ["¿", "Han", "podido", "quedarse", "?"], tense: TENSES.PERFECT, dist: ["hemos", "puedo", "quedado"] },
+            { q: "She has not been able to cook.", a: ["Ella", "no", "ha", "podido", "cocinar"], alt: ["No", "ha", "podido", "cocinar"], tense: TENSES.PERFECT, dist: ["han", "pude", "cocinando"] },
+            { q: "Have you (inf) been able to eat?", a: ["¿", "Tú", "has", "podido", "comer", "?"], alt: ["¿", "Has", "tú", "podido", "comer", "?"], alt2: ["¿", "Has", "podido", "comer", "tú", "?"], alt3: ["¿", "Has", "podido", "comer", "?"], tense: TENSES.PERFECT, dist: ["he", "puede", "comido"] }
+        ].map((item, idx) => {
+            const allWords = new Set([...item.a, ...(item.alt || []), ...(item.alt2 || []), ...(item.alt3 || []), ...item.dist]);
+            return {
+                id: idx,
+                ...item,
+                shuffledWords: Array.from(allWords).sort(() => Math.random() - 0.5)
+            };
+        });
 
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (err) { console.error("Auth error:", err); }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
-    return () => unsubscribe();
-  }, []);
+        function App() {
+            const [user, setUser] = useState(null);
+            const [step, setStep] = useState('auth'); 
+            const [form, setForm] = useState({ firstName: '', lastName: '', email: '', period: '' });
+            const [currentIdx, setCurrentIdx] = useState(0);
+            const [responses, setResponses] = useState({}); 
+            const [cheatCount, setCheatCount] = useState(0);
+            const [showAlert, setShowAlert] = useState(false);
+            const [isSubmitting, setIsSubmitting] = useState(false);
+            const [lastViewedTense, setLastViewedTense] = useState(null);
 
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.hidden && step === 'quiz') {
-        setCheatCount(prev => prev + 1);
-        setShowAlert(true);
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [step]);
+            useEffect(() => {
+                const unsubscribe = auth.onAuthStateChanged((u) => {
+                    if (u) setUser(u);
+                    else auth.signInAnonymously();
+                });
+                return () => unsubscribe();
+            }, []);
 
-  const handleStart = async () => {
-    if (!form.firstName || !form.lastName || !form.email || !form.period) return;
-    const emailId = form.email.trim().toLowerCase();
-    try {
-      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'submissions', emailId);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        alert("Retakes are not allowed for this email.");
-        return;
-      }
-      setLastViewedTense(QUESTIONS_RAW[0].tense);
-      setStep('learn');
-    } catch (err) { console.error(err); }
-  };
+            useEffect(() => {
+                const handleVisibility = () => {
+                    if (document.hidden && step === 'quiz') {
+                        setCheatCount(prev => prev + 1);
+                        setShowAlert(true);
+                    }
+                };
+                document.addEventListener("visibilitychange", handleVisibility);
+                return () => document.removeEventListener("visibilitychange", handleVisibility);
+            }, [step]);
 
-  const toggleWord = (word) => {
-    const currentAns = responses[currentIdx] || [];
-    if (currentAns.includes(word)) {
-      setResponses({ ...responses, [currentIdx]: currentAns.filter(w => w !== word) });
-    } else {
-      setResponses({ ...responses, [currentIdx]: [...currentAns, word] });
-    }
-  };
+            const handleStart = async () => {
+                if (!form.firstName || !form.lastName || !form.email || !form.period) return;
+                const emailId = form.email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+                try {
+                    const docRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('submissions').doc(emailId);
+                    const docSnap = await docRef.get();
+                    if (docSnap.exists) {
+                        alert("Access denied: You have already submitted this exam.");
+                        return;
+                    }
+                    setLastViewedTense(QUESTIONS_RAW[0].tense);
+                    setStep('learn');
+                } catch (err) { console.error(err); }
+            };
 
-  const nextQuestion = () => {
-    const nextIdx = currentIdx + 1;
-    if (nextIdx < QUESTIONS_RAW.length) {
-      const currentTense = QUESTIONS_RAW[currentIdx].tense;
-      const nextTense = QUESTIONS_RAW[nextIdx].tense;
-      setCurrentIdx(nextIdx);
-      if (nextTense !== currentTense) {
-        setLastViewedTense(nextTense);
-        setStep('learn');
-      }
-    } else {
-      submitQuiz();
-    }
-  };
+            const toggleWord = (word) => {
+                const currentAns = responses[currentIdx] || [];
+                if (currentAns.includes(word)) {
+                    setResponses({ ...responses, [currentIdx]: currentAns.filter(w => w !== word) });
+                } else {
+                    setResponses({ ...responses, [currentIdx]: [...currentAns, word] });
+                }
+            };
 
-  const prevQuestion = () => {
-    if (currentIdx > 0) {
-      setCurrentIdx(currentIdx - 1);
-    }
-  };
+            const nextQuestion = () => {
+                const nextIdx = currentIdx + 1;
+                if (nextIdx < QUESTIONS_RAW.length) {
+                    const currentTense = QUESTIONS_RAW[currentIdx].tense;
+                    const nextTense = QUESTIONS_RAW[nextIdx].tense;
+                    setCurrentIdx(nextIdx);
+                    if (nextTense !== currentTense) {
+                        setLastViewedTense(nextTense);
+                        setStep('learn');
+                    }
+                } else {
+                    submitQuiz();
+                }
+            };
 
-  const submitQuiz = async () => {
-    if (!user) return;
-    setIsSubmitting(true);
-    
-    let scoreVal = 0;
-    const log = QUESTIONS_RAW.map((q, idx) => {
-      const userStr = (responses[idx] || []).join(" ").toLowerCase();
-      const validVariations = [
-        q.a.join(" "),
-        q.alt?.join(" "),
-        q.alt2?.join(" "),
-        q.alt3?.join(" ")
-      ].filter(Boolean).map(v => v.toLowerCase());
+            const submitQuiz = async () => {
+                if (!user) return;
+                setIsSubmitting(true);
+                
+                let scoreVal = 0;
+                const log = QUESTIONS_RAW.map((q, idx) => {
+                    const userStr = (responses[idx] || []).join(" ").toLowerCase();
+                    const validVariations = [
+                        q.a.join(" "),
+                        q.alt?.join(" "),
+                        q.alt2?.join(" "),
+                        q.alt3?.join(" ")
+                    ].filter(Boolean).map(v => v.toLowerCase());
 
-      const isCorrect = validVariations.includes(userStr);
-      if (isCorrect) scoreVal++;
-      return `${idx + 1}${isCorrect ? 'r' : 'w'}`;
-    }).join(", ");
+                    const isCorrect = validVariations.includes(userStr);
+                    if (isCorrect) scoreVal++;
+                    return `${idx + 1}${isCorrect ? 'r' : 'w'}`;
+                }).join(", ");
 
-    const subData = {
-      title: QUIZ_TITLE,
-      date: new Date().toLocaleString(),
-      firstName: form.firstName,
-      lastName: form.lastName,
-      email: form.email,
-      period: form.period,
-      rawScore: scoreVal,
-      displayScore: `${scoreVal}/${QUESTIONS_RAW.length}`,
-      cheatCount: cheatCount,
-      resultsLog: log
-    };
+                const subData = {
+                    title: QUIZ_TITLE,
+                    timestamp: new Date().toLocaleString(),
+                    firstName: form.firstName,
+                    lastName: form.lastName,
+                    email: form.email,
+                    period: form.period,
+                    rawScore: scoreVal,
+                    displayScore: `${scoreVal}/${QUESTIONS_RAW.length}`,
+                    cheatCount: cheatCount,
+                    resultsLog: log
+                };
 
-    try {
-      const emailId = form.email.trim().toLowerCase();
-      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', emailId), subData);
-      setStep('results');
-      downloadCSV(subData);
-    } catch (err) { alert("Error saving results."); }
-    setIsSubmitting(false);
-  };
+                try {
+                    const emailId = form.email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('submissions').doc(emailId).set(subData);
+                    setStep('results');
+                    downloadCSV(subData);
+                } catch (err) { alert("Error saving results."); }
+                setIsSubmitting(false);
+            };
 
-  const downloadCSV = (data) => {
-    const headers = ["Title", "Timestamp", "First Name", "Last Name", "Email", "Period", "Score", "Question Log", "Cheat Alerts"];
-    const row = [
-      data.title,
-      data.date,
-      data.firstName,
-      data.lastName,
-      data.email,
-      data.period,
-      `'${data.displayScore}`, 
-      data.resultsLog,
-      data.cheatCount
-    ].map(field => `"${field}"`).join(",");
+            const downloadCSV = (data) => {
+                const headers = ["Title", "Timestamp", "First Name", "Last Name", "Email", "Period", "Score", "Detailed Results", "Cheating Alerts"];
+                const row = [
+                    data.title,
+                    data.timestamp,
+                    data.firstName,
+                    data.lastName,
+                    data.email,
+                    data.period,
+                    `'${data.displayScore}`, // Prefix to force text format in Excel
+                    data.resultsLog,
+                    data.cheatCount
+                ].map(field => `"${field}"`).join(",");
 
-    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + row;
-    const link = document.createElement("a");
-    link.setAttribute("href", encodeURI(csvContent));
-    link.setAttribute("download", `results_${data.firstName}_${data.lastName}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+                const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + row;
+                const link = document.createElement("a");
+                link.setAttribute("href", encodeURI(csvContent));
+                link.setAttribute("download", `quiz_results_${data.firstName}_${data.lastName}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
 
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (e.key === 'Enter') {
-        if (step === 'quiz') nextQuestion();
-        else if (step === 'learn') setStep('quiz');
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [currentIdx, responses, step]);
+            useEffect(() => {
+                const handleKey = (e) => {
+                    if (e.key === 'Enter') {
+                        if (step === 'quiz') nextQuestion();
+                        else if (step === 'learn') setStep('quiz');
+                    }
+                };
+                window.addEventListener('keydown', handleKey);
+                return () => window.removeEventListener('keydown', handleKey);
+            }, [currentIdx, responses, step]);
 
-  if (!user) return <div className="h-screen bg-lime-50 flex items-center justify-center font-bold text-lime-600">Verifying Identity...</div>;
+            return (
+                <div className="min-h-screen p-4 md:p-8 flex items-center justify-center">
+                    {showAlert && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+                            <div className="bg-white rounded-2xl p-8 max-w-sm text-center shadow-2xl border-4 border-red-500">
+                                <div className="text-red-500 text-6xl mb-4 font-black">!</div>
+                                <h2 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">Cheat Detected</h2>
+                                <p className="text-slate-600 mb-6 font-medium">Navigating away from the exam is strictly recorded. Return immediately.</p>
+                                <button onClick={() => setShowAlert(false)} className="w-full bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg">Back to Quiz</button>
+                            </div>
+                        </div>
+                    )}
 
-  return (
-    <div className="min-h-screen bg-lime-50 font-sans text-slate-800 p-4 md:p-8">
-      {showAlert && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-white rounded-2xl p-8 max-w-sm text-center shadow-2xl border-4 border-red-500">
-            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">Tab Swap Alert!</h2>
-            <p className="text-slate-600 mb-6 font-medium">Please stay on this tab. Leaving the quiz is recorded for review.</p>
-            <button onClick={() => setShowAlert(false)} className="w-full bg-red-500 text-white font-bold py-3 rounded-xl">Continue</button>
-          </div>
-        </div>
-      )}
+                    <div className="max-w-4xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-lime-100 min-h-[600px] flex flex-col relative">
+                        {/* Status Bar */}
+                        <div className="bg-lime-500 p-6 text-white flex justify-between items-center shadow-md">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-white/20 rounded-lg">
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                                </div>
+                                <h1 className="text-xl font-black uppercase tracking-tighter">{QUIZ_TITLE}</h1>
+                            </div>
+                            {step === 'quiz' && (
+                                <div className="bg-white/20 px-4 py-1 rounded-full text-sm font-bold border border-white/20">
+                                    Question {currentIdx + 1} of 50
+                                </div>
+                            )}
+                        </div>
 
-      <div className="max-w-4xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden border border-lime-100 min-h-[600px] flex flex-col">
-        <div className="bg-lime-500 p-6 text-white flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <GraduationCap className="w-8 h-8" />
-            <h1 className="text-xl font-black uppercase tracking-tighter">{QUIZ_TITLE}</h1>
-          </div>
-          {step === 'quiz' && (
-            <div className="bg-white/20 px-4 py-1 rounded-full text-sm font-bold">
-              Progress: {currentIdx + 1}/50
-            </div>
-          )}
-        </div>
+                        {/* STEP: Sign-In */}
+                        {step === 'auth' && (
+                            <div className="p-10 flex-grow flex flex-col justify-center animate-in fade-in duration-300">
+                                <div className="max-w-md mx-auto w-full space-y-6">
+                                    <div className="text-center mb-8">
+                                        <h2 className="text-3xl font-black text-slate-900">Student Sign-In</h2>
+                                        <p className="text-slate-500 font-medium">Verify your identity to begin the Proficiency Exam.</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <input className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 transition-all font-medium" placeholder="First Name" value={form.firstName} onChange={e => setForm({...form, firstName: e.target.value})} />
+                                        <input className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 transition-all font-medium" placeholder="Last Name" value={form.lastName} onChange={e => setForm({...form, lastName: e.target.value})} />
+                                    </div>
+                                    <input className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 transition-all font-medium" placeholder="Student ID or Email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
+                                    <select className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 transition-all font-bold text-slate-600 appearance-none cursor-pointer" value={form.period} onChange={e => setForm({...form, period: e.target.value})}>
+                                        <option value="">Choose Class Period...</option>
+                                        {['1st', 'A2', 'A4', 'B3', 'B4', '5th'].map(p => <option key={p} value={p}>{p}</option>)}
+                                    </select>
+                                    <button onClick={handleStart} disabled={!form.firstName || !form.lastName || !form.email || !form.period} className="w-full bg-lime-500 text-white font-black py-5 rounded-2xl shadow-xl shadow-lime-200 disabled:bg-slate-200 disabled:shadow-none hover:bg-lime-600 transition-all active:scale-95 text-lg uppercase tracking-widest">Login & Begin</button>
+                                </div>
+                            </div>
+                        )}
 
-        {step === 'auth' && (
-          <div className="p-10 flex-grow flex flex-col justify-center">
-            <div className="max-w-md mx-auto w-full space-y-6">
-              <div className="text-center mb-8">
-                <h2 className="text-3xl font-black text-slate-900">Student Sign-In</h2>
-                <p className="text-slate-500">School ID/Email is required to track results.</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <input className="w-full p-3 bg-slate-50 border-2 rounded-xl outline-none focus:border-lime-500" placeholder="First Name" value={form.firstName} onChange={e => setForm({...form, firstName: e.target.value})} />
-                <input className="w-full p-3 bg-slate-50 border-2 rounded-xl outline-none focus:border-lime-500" placeholder="Last Name" value={form.lastName} onChange={e => setForm({...form, lastName: e.target.value})} />
-              </div>
-              <input className="w-full p-3 bg-slate-50 border-2 rounded-xl outline-none focus:border-lime-500" placeholder="Email / Student ID" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
-              <select className="w-full p-3 bg-slate-50 border-2 rounded-xl outline-none focus:border-lime-500 font-medium" value={form.period} onChange={e => setForm({...form, period: e.target.value})}>
-                <option value="">Select Period...</option>
-                {['1st', 'A2', 'A4', 'B3', 'B4', '5th'].map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-              <button onClick={handleStart} disabled={!form.firstName || !form.lastName || !form.email || !form.period} className="w-full bg-lime-500 text-white font-black py-4 rounded-2xl shadow-lg disabled:bg-slate-200 hover:bg-lime-600 transition-all active:scale-95 text-lg">ENTER QUIZ</button>
-            </div>
-          </div>
-        )}
+                        {/* STEP: Lesson Slide */}
+                        {step === 'learn' && lastViewedTense && LEARNING_SLIDES[lastViewedTense] && (
+                            <div className="p-10 flex-grow flex flex-col justify-center text-center space-y-8 animate-in slide-in-from-right duration-500">
+                                <div className="w-20 h-20 bg-lime-100 rounded-3xl flex items-center justify-center mx-auto text-lime-600">
+                                    <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                                </div>
+                                <div className="max-w-2xl mx-auto">
+                                    <h2 className="text-4xl font-black text-lime-600 mb-6 uppercase tracking-tight">{LEARNING_SLIDES[lastViewedTense].title}</h2>
+                                    <div className="bg-slate-50 p-8 rounded-3xl border-l-[12px] border-lime-400 text-left shadow-sm mb-8">
+                                        <p className="text-xl leading-relaxed text-slate-700 font-medium mb-6">{LEARNING_SLIDES[lastViewedTense].desc}</p>
+                                        <div className="space-y-4">
+                                            {LEARNING_SLIDES[lastViewedTense].examples.map((ex, i) => (
+                                                <div key={i} className="bg-white p-4 rounded-xl border border-lime-100 shadow-sm">
+                                                    <div className="text-lime-700 font-black text-xl mb-1">{ex.s}</div>
+                                                    <div className="text-slate-500 italic text-sm font-semibold">{ex.t}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setStep('quiz')} className="bg-lime-500 text-white font-black py-5 px-20 rounded-2xl text-xl shadow-2xl hover:bg-lime-600 transition-all active:scale-95 uppercase tracking-widest">I'm Ready</button>
+                                </div>
+                            </div>
+                        )}
 
-        {step === 'learn' && lastViewedTense && LEARNING_SLIDES[lastViewedTense] && (
-          <div className="p-10 flex-grow flex flex-col justify-center text-center space-y-8 animate-in fade-in duration-500">
-            <div className="w-20 h-20 bg-lime-100 rounded-3xl flex items-center justify-center mx-auto transform rotate-3">
-              <BookOpen className="w-10 h-10 text-lime-600" />
-            </div>
-            <div>
-              <h2 className="text-4xl font-black text-lime-600 mb-4">{LEARNING_SLIDES[lastViewedTense].title}</h2>
-              <div className="max-w-2xl mx-auto bg-slate-50 p-8 rounded-3xl border-l-8 border-lime-400 text-left shadow-sm">
-                <p className="text-xl leading-relaxed text-slate-700 mb-6 font-medium">{LEARNING_SLIDES[lastViewedTense].desc}</p>
-                <div className="space-y-4">
-                  <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">Examples & Translations:</p>
-                  {LEARNING_SLIDES[lastViewedTense].examples.map((ex, i) => (
-                    <div key={i} className="bg-white p-4 rounded-xl border border-lime-100">
-                      <div className="text-lime-700 font-black text-xl mb-1">{ex.s}</div>
-                      <div className="text-slate-500 italic text-sm">{ex.t}</div>
+                        {/* STEP: Quiz */}
+                        {step === 'quiz' && (
+                            <div className="p-8 flex-grow flex flex-col animate-in fade-in duration-300">
+                                <div className="flex justify-between items-center mb-10">
+                                    <span className="bg-lime-100 text-lime-700 px-6 py-2 rounded-full text-xs font-black uppercase border border-lime-200 tracking-widest">{QUESTIONS_RAW[currentIdx].tense}</span>
+                                    <span className="font-black text-slate-300 text-2xl tracking-tighter">{currentIdx + 1} / 50</span>
+                                </div>
+
+                                <div className="text-center mb-12">
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Translate into Spanish:</p>
+                                    <h2 className="text-4xl md:text-5xl font-black text-slate-900 leading-tight">{QUESTIONS_RAW[currentIdx].q}</h2>
+                                </div>
+
+                                {/* Answer Dropzone */}
+                                <div className="min-h-[100px] bg-slate-50 rounded-3xl border-4 border-dotted border-lime-200 mb-10 flex flex-wrap gap-2.5 p-6 items-center justify-center transition-all">
+                                    {(responses[currentIdx] || []).map((word, i) => (
+                                        <button key={`ans-${i}`} onClick={() => toggleWord(word)} className="bg-lime-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-lime-600 transition-all active:scale-90 text-lg border-b-4 border-lime-700">
+                                            {word}
+                                        </button>
+                                    ))}
+                                    {(responses[currentIdx] || []).length === 0 && <p className="text-slate-300 italic font-bold text-xl opacity-50">Tap words to build your answer...</p>}
+                                </div>
+
+                                {/* Word Bank */}
+                                <div className="flex flex-wrap gap-3 justify-center mb-auto">
+                                    {QUESTIONS_RAW[currentIdx].shuffledWords.map((word, i) => {
+                                        const used = (responses[currentIdx] || []).includes(word);
+                                        return (
+                                            <button key={`word-${i}`} onClick={() => !used && toggleWord(word)} disabled={used} className={`px-6 py-4 rounded-2xl font-bold border-2 transition-all text-xl word-btn ${used ? 'bg-slate-50 text-slate-100 border-slate-50 opacity-20 scale-90' : 'bg-white border-lime-200 text-lime-600 hover:border-lime-500 hover:bg-lime-50 shadow-md'}`}>
+                                                {word}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Controls */}
+                                <div className="flex justify-between items-center mt-12 pt-8 border-t-2 border-slate-50">
+                                    <button onClick={() => currentIdx > 0 && setCurrentIdx(currentIdx-1)} disabled={currentIdx === 0} className="flex items-center gap-2 font-black text-slate-300 hover:text-lime-500 disabled:opacity-0 transition-colors uppercase tracking-widest text-sm">
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 19l-7-7 7-7" /></svg> Previous
+                                    </button>
+                                    <button onClick={nextQuestion} disabled={isSubmitting} className="bg-slate-800 text-white px-16 py-5 rounded-3xl font-black flex items-center gap-3 shadow-2xl hover:bg-slate-900 transition-all active:scale-95 uppercase tracking-widest">
+                                        {isSubmitting ? 'Submitting...' : (currentIdx === 49 ? 'Finish Exam' : 'Next Question')}
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7" /></svg>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* STEP: Completed */}
+                        {step === 'results' && (
+                            <div className="p-16 flex-grow flex flex-col justify-center text-center space-y-10 animate-in zoom-in duration-700">
+                                <div className="w-32 h-32 bg-lime-100 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                                    <svg className="w-16 h-16 text-lime-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d="M5 13l4 4L19 7" /></svg>
+                                </div>
+                                <div>
+                                    <h2 className="text-6xl font-black text-slate-900 mb-4 tracking-tighter uppercase">Submission Success</h2>
+                                    <p className="text-2xl text-slate-500 font-medium max-w-lg mx-auto leading-relaxed">Your results were saved to the system and an official CSV backup was downloaded to your device.</p>
+                                </div>
+                                <button onClick={() => window.location.reload()} className="max-w-md mx-auto w-full flex items-center justify-center gap-4 bg-slate-800 text-white py-6 rounded-3xl font-black hover:bg-slate-900 transition-all shadow-2xl uppercase tracking-widest text-xl">
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                                    Restart Exam
+                                </button>
+                            </div>
+                        )}
                     </div>
-                  ))}
                 </div>
-              </div>
-            </div>
-            <button onClick={() => setStep('quiz')} className="bg-lime-500 text-white font-black py-5 px-16 rounded-2xl text-xl shadow-xl hover:bg-lime-600 transition-all active:scale-95">GO TO QUESTIONS</button>
-          </div>
-        )}
+            );
+        }
 
-        {step === 'quiz' && (
-          <div className="p-8 flex-grow flex flex-col">
-            <div className="flex justify-between items-center mb-8">
-              <span className="bg-lime-100 text-lime-700 px-4 py-1.5 rounded-full text-xs font-black uppercase border border-lime-200">{QUESTIONS_RAW[currentIdx].tense}</span>
-              <span className="font-black text-slate-300 text-xl">{currentIdx + 1} / 50</span>
-            </div>
-
-            <div className="text-center mb-10">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Translate the following:</p>
-              <h2 className="text-4xl font-black text-slate-900 leading-tight">{QUESTIONS_RAW[currentIdx].q}</h2>
-            </div>
-
-            <div className="min-h-[90px] bg-slate-50 rounded-2xl border-2 border-dashed border-lime-200 mb-8 flex flex-wrap gap-2 p-4 items-center justify-center">
-              {(responses[currentIdx] || []).map((word, i) => (
-                <button key={`ans-${i}`} onClick={() => toggleWord(word)} className="bg-lime-500 text-white px-5 py-2.5 rounded-xl font-bold shadow-md hover:bg-lime-600 transition-all active:scale-90">{word}</button>
-              ))}
-              {(responses[currentIdx] || []).length === 0 && <p className="text-slate-300 italic font-medium">Build your sentence here...</p>}
-            </div>
-
-            <div className="flex flex-wrap gap-3 justify-center mb-auto">
-              {QUESTIONS_RAW[currentIdx].shuffledWords.map((word, i) => {
-                const used = (responses[currentIdx] || []).includes(word);
-                return (
-                  <button key={`word-${i}`} onClick={() => !used && toggleWord(word)} disabled={used} className={`px-5 py-3 rounded-2xl font-bold border-2 transition-all text-lg ${used ? 'bg-slate-50 text-slate-200 border-slate-50 opacity-50' : 'bg-white border-lime-200 text-lime-600 hover:border-lime-500 active:scale-95 shadow-sm'}`}>{word}</button>
-                );
-              })}
-            </div>
-
-            <div className="flex justify-between items-center mt-12 pt-6 border-t border-slate-100">
-              <button onClick={prevQuestion} disabled={currentIdx === 0} className="flex items-center gap-2 font-black text-slate-400 hover:text-lime-500 disabled:opacity-0 transition-colors uppercase tracking-widest text-sm"><ChevronLeft /> BACK</button>
-              <button onClick={nextQuestion} disabled={isSubmitting} className="bg-slate-800 text-white px-12 py-4 rounded-2xl font-black flex items-center gap-2 shadow-2xl hover:bg-slate-900 transition-all active:scale-95 uppercase tracking-widest">
-                {isSubmitting ? 'SAVING...' : (currentIdx === 49 ? 'FINISH' : 'NEXT')} <ChevronRight />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {step === 'results' && (
-          <div className="p-16 flex-grow flex flex-col justify-center text-center space-y-8 animate-in zoom-in duration-500">
-            <div className="w-24 h-24 bg-lime-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle2 className="w-12 h-12 text-lime-600" />
-            </div>
-            <div>
-              <h2 className="text-5xl font-black text-slate-900 mb-4">COMPLETE!</h2>
-              <p className="text-xl text-slate-500 font-medium max-w-md mx-auto">Your score was saved to the gradebook and a record has been downloaded.</p>
-            </div>
-            <button onClick={() => window.location.reload()} className="max-w-sm mx-auto w-full flex items-center justify-center gap-3 bg-slate-800 text-white py-5 rounded-2xl font-black hover:bg-slate-900 transition-all shadow-xl uppercase tracking-widest"><RefreshCw /> RESTART</button>
-          </div>
-        )}
-      </div>
-      
-      <div className="mt-8 text-center text-slate-400 text-xs font-bold tracking-widest uppercase opacity-40">
-        Gradebook System &bull; Poder Verb Mastery &bull; Spanish II
-      </div>
-    </div>
-  );
-}
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

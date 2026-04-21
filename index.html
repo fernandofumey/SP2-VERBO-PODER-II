@@ -25,19 +25,25 @@
             to { opacity: 1; transform: translateX(0); }
         }
         [hidden] { display: none !important; }
+        .bg-pattern {
+            background-color: #f7fee7;
+            background-image: radial-gradient(#d9f99d 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
     </style>
 </head>
-<body class="bg-lime-50 text-slate-800">
+<body class="bg-pattern text-slate-800">
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        const { useState, useEffect, useMemo } = React;
 
-        // --- CONFIGURACIÓN GLOBAL ---
+        // --- CONSTANTES GLOBALES ---
         const QUIZ_TITLE = "Dominando 'Poder' - Español II";
         
         // --- CONFIGURACIÓN DE FIREBASE ---
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+        // Si despliegas en GitHub, pega tus credenciales aquí:
+        const firebaseConfig = {
             apiKey: "",
             authDomain: "",
             projectId: "",
@@ -46,15 +52,7 @@
             appId: ""
         };
 
-        // Inicialización de Firebase
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-        }
-        const db = firebase.firestore();
-        const auth = firebase.auth();
-        const internalAppId = typeof __app_id !== 'undefined' ? __app_id : 'poder-quiz-v4';
-
-        // --- CONTENIDO ---
+        // --- INICIALIZACIÓN DE DATOS ---
         const TENSES = {
             PRESENT: "Presente de Indicativo",
             PRETERITE: "Pretérito de Indicativo",
@@ -168,6 +166,7 @@
             };
         });
 
+        // --- COMPONENTE PRINCIPAL ---
         function App() {
             const [user, setUser] = useState(null);
             const [step, setStep] = useState('auth'); 
@@ -178,25 +177,31 @@
             const [showAlert, setShowAlert] = useState(false);
             const [isSubmitting, setIsSubmitting] = useState(false);
             const [lastViewedTense, setLastViewedTense] = useState(null);
-            const [statusMessage, setStatusMessage] = useState('Iniciando sesión segura...');
+            const [isLocalMode, setIsLocalMode] = useState(false);
 
-            // REGLA 3: Autenticación obligatoria antes de Firestore
+            // Inicialización Segura de Firebase
             useEffect(() => {
-                const initAuth = async () => {
+                const init = async () => {
                     try {
-                        let result;
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            result = await auth.signInWithCustomToken(__initial_auth_token);
-                        } else {
-                            result = await auth.signInAnonymously();
+                        if (!firebase.apps.length && firebaseConfig.apiKey) {
+                            firebase.initializeApp(firebaseConfig);
                         }
-                        setUser(result.user);
-                    } catch (error) {
-                        console.error("Error crítico de Firebase:", error);
-                        setStatusMessage('Error al conectar con el servidor. Verifica tu configuración de Firebase.');
+                        
+                        if (firebase.apps.length) {
+                            const result = await firebase.auth().signInAnonymously();
+                            setUser(result.user);
+                        } else {
+                            console.warn("Iniciando en Modo Local (Sin Firebase)");
+                            setIsLocalMode(true);
+                            setUser({ uid: 'local-user' });
+                        }
+                    } catch (e) {
+                        console.error("Firebase Auth Error:", e);
+                        setIsLocalMode(true);
+                        setUser({ uid: 'local-user' });
                     }
                 };
-                initAuth();
+                init();
             }, []);
 
             useEffect(() => {
@@ -212,27 +217,24 @@
 
             const handleStart = async () => {
                 if (!form.firstName || !form.lastName || !form.email || !form.period) return;
-                if (!user) {
-                    alert("Espera a que la conexión se establezca...");
-                    return;
-                }
-
-                const emailId = form.email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
-                try {
-                    // REGLA 1: Rutas estrictas para evitar errores de permisos
-                    const docRef = db.collection('artifacts').doc(internalAppId).collection('public').doc('data').collection('submissions').doc(emailId);
-                    const docSnap = await docRef.get();
-                    
-                    if (docSnap.exists) {
-                        alert("Acceso denegado: Este email ya ha enviado sus respuestas.");
-                        return;
+                
+                if (!isLocalMode) {
+                    const emailId = form.email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+                    const internalAppId = (window.__app_id) || 'poder-quiz-v4';
+                    try {
+                        const docRef = firebase.firestore().collection('artifacts').doc(internalAppId).collection('public').doc('data').collection('submissions').doc(emailId);
+                        const docSnap = await docRef.get();
+                        if (docSnap.exists) {
+                            alert("Acceso denegado: Ya has enviado este examen.");
+                            return;
+                        }
+                    } catch (err) { 
+                        console.error("Firestore error:", err);
                     }
-                    setLastViewedTense(QUESTIONS_RAW[0].tense);
-                    setStep('learn');
-                } catch (err) { 
-                    console.error("Error de permisos en Firestore:", err);
-                    alert("Error al verificar entrada anterior. Asegúrate de que las reglas de Firestore permitan el acceso público en la ruta /artifacts/" + internalAppId + "/public/data/submissions/");
                 }
+                
+                setLastViewedTense(QUESTIONS_RAW[0].tense);
+                setStep('learn');
             };
 
             const toggleWord = (word) => {
@@ -260,9 +262,7 @@
             };
 
             const submitQuiz = async () => {
-                if (!user) return;
                 setIsSubmitting(true);
-                
                 let scoreVal = 0;
                 const log = QUESTIONS_RAW.map((q, idx) => {
                     const userStr = (responses[idx] || []).join(" ").toLowerCase();
@@ -291,25 +291,25 @@
                     resultsLog: log
                 };
 
-                try {
-                    const emailId = form.email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
-                    // REGLA 1: Ruta estricta para guardar datos públicos
-                    await db.collection('artifacts').doc(internalAppId).collection('public').doc('data').collection('submissions').doc(emailId).set(subData);
-                    setStep('results');
-                    downloadCSV(subData);
-                } catch (err) { 
-                    console.error("Error al guardar:", err);
-                    alert("Error de permisos al enviar resultados. Revisa las reglas de seguridad de Firestore.");
+                if (!isLocalMode) {
+                    try {
+                        const emailId = form.email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+                        const internalAppId = (window.__app_id) || 'poder-quiz-v4';
+                        await firebase.firestore().collection('artifacts').doc(internalAppId).collection('public').doc('data').collection('submissions').doc(emailId).set(subData);
+                    } catch (err) { console.error("Cloud Save Error:", err); }
                 }
+
+                setStep('results');
+                downloadCSV(subData);
                 setIsSubmitting(false);
             };
 
             const downloadCSV = (data) => {
-                const headers = ["Titulo", "Fecha", "Nombre", "Apellido", "Email", "Periodo", "Puntaje", "Registro", "Trampas"];
+                const headers = ["Titulo", "Fecha/Hora", "Nombre", "Apellido", "Email", "Periodo", "Puntaje", "Detalle", "Trampas"];
                 const row = [
                     data.title, data.timestamp, data.firstName, data.lastName, data.email, data.period,
                     `'${data.displayScore}`, data.resultsLog, data.cheatCount
-                ].map(f => `"${f}"`).join(",");
+                ].map(field => `"${field}"`).join(",");
                 const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + row;
                 const link = document.createElement("a");
                 link.setAttribute("href", encodeURI(csvContent));
@@ -330,119 +330,91 @@
                 return () => window.removeEventListener('keydown', handleKey);
             }, [currentIdx, responses, step]);
 
-            if (!user) return <div className="h-screen bg-lime-50 flex items-center justify-center font-bold text-lime-600 uppercase tracking-widest text-center p-4">{statusMessage}</div>;
+            if (!user) return <div className="h-screen bg-lime-50 flex items-center justify-center font-bold text-lime-600 uppercase tracking-widest animate-pulse">Cargando aplicación...</div>;
 
             return (
                 <div className="min-h-screen p-4 md:p-8 flex items-center justify-center">
                     {showAlert && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
                             <div className="bg-white rounded-2xl p-8 max-w-sm text-center shadow-2xl border-4 border-red-500">
-                                <div className="text-red-500 text-6xl mb-4 font-black">!</div>
-                                <h2 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">¡ADVERTENCIA!</h2>
-                                <p className="text-slate-600 mb-6 font-medium">Has salido de la ventana. Este incidente ha sido registrado automáticamente.</p>
-                                <button onClick={() => setShowAlert(false)} className="w-full bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-red-600 transition-all">Regresar al examen</button>
+                                <h2 className="text-2xl font-black text-slate-900 mb-2 uppercase tracking-tight">¡ALERTA!</h2>
+                                <p className="text-slate-600 mb-6 font-medium">Salir de la pestaña queda registrado. Regresa al examen inmediatamente.</p>
+                                <button onClick={() => setShowAlert(false)} className="w-full bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg">Entendido</button>
                             </div>
                         </div>
                     )}
 
                     <div className="max-w-4xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-lime-100 min-h-[600px] flex flex-col relative">
                         <div className="bg-lime-500 p-6 text-white flex justify-between items-center shadow-md">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2 bg-white/20 rounded-lg">
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
-                                </div>
-                                <h1 className="text-xl font-black uppercase tracking-tighter">{QUIZ_TITLE}</h1>
-                            </div>
-                            {step === 'quiz' && (
-                                <div className="bg-white/20 px-4 py-1 rounded-full text-sm font-bold border border-white/20">
-                                    Pregunta {currentIdx + 1} de 50
-                                </div>
-                            )}
+                            <h1 className="text-xl font-black uppercase tracking-tighter">{QUIZ_TITLE}</h1>
+                            {step === 'quiz' && <div className="bg-white/20 px-4 py-1 rounded-full text-sm font-bold">Progreso: {currentIdx + 1} / 50</div>}
                         </div>
 
                         {step === 'auth' && (
                             <div className="p-10 flex-grow flex flex-col justify-center animate-in fade-in duration-300">
                                 <div className="max-w-md mx-auto w-full space-y-6">
-                                    <div className="text-center mb-8">
-                                        <h2 className="text-3xl font-black text-slate-900">Registro del Estudiante</h2>
-                                        <p className="text-slate-500 font-medium">Ingresa tus datos para acceder al examen.</p>
-                                    </div>
+                                    <h2 className="text-3xl font-black text-slate-900 text-center">Registro</h2>
                                     <div className="grid grid-cols-2 gap-4">
-                                        <input className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 transition-all font-medium" placeholder="Nombre" value={form.firstName} onChange={e => setForm({...form, firstName: e.target.value})} />
-                                        <input className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 transition-all font-medium" placeholder="Apellido" value={form.lastName} onChange={e => setForm({...form, lastName: e.target.value})} />
+                                        <input className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500" placeholder="Nombre" value={form.firstName} onChange={e => setForm({...form, firstName: e.target.value})} />
+                                        <input className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500" placeholder="Apellido" value={form.lastName} onChange={e => setForm({...form, lastName: e.target.value})} />
                                     </div>
-                                    <input className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 transition-all font-medium" placeholder="Email o ID Escolar" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
-                                    <select className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 transition-all font-bold text-slate-600 cursor-pointer" value={form.period} onChange={e => setForm({...form, period: e.target.value})}>
+                                    <input className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500" placeholder="ID Estudiantil / Email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
+                                    <select className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-bold" value={form.period} onChange={e => setForm({...form, period: e.target.value})}>
                                         <option value="">Selecciona tu periodo...</option>
                                         {['1st', 'A2', 'A4', 'B3', 'B4', '5th'].map(p => <option key={p} value={p}>{p}</option>)}
                                     </select>
-                                    <button onClick={handleStart} disabled={!form.firstName || !form.lastName || !form.email || !form.period} className="w-full bg-lime-500 text-white font-black py-5 rounded-2xl shadow-xl shadow-lime-200 disabled:bg-slate-200 hover:bg-lime-600 transition-all active:scale-95 text-lg uppercase tracking-widest">Iniciar Examen</button>
+                                    <button onClick={handleStart} disabled={!form.firstName || !form.lastName || !form.email || !form.period} className="w-full bg-lime-500 text-white font-black py-5 rounded-2xl shadow-xl hover:bg-lime-600 transition-all active:scale-95 text-lg">EMPEZAR</button>
+                                    {isLocalMode && <p className="text-xs text-amber-600 text-center font-bold">⚠️ Ejecutando en Modo Local (los resultados se descargarán pero no se subirán a la nube).</p>}
                                 </div>
                             </div>
                         )}
 
                         {step === 'learn' && lastViewedTense && LEARNING_SLIDES[lastViewedTense] && (
                             <div className="p-10 flex-grow flex flex-col justify-center text-center space-y-8 learning-card">
-                                <div className="w-20 h-20 bg-lime-100 rounded-3xl flex items-center justify-center mx-auto text-lime-600">
-                                    <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
-                                </div>
-                                <div className="max-w-2xl mx-auto">
-                                    <h2 className="text-4xl font-black text-lime-600 mb-6 uppercase tracking-tight">{LEARNING_SLIDES[lastViewedTense].title}</h2>
-                                    <div className="bg-slate-50 p-8 rounded-3xl border-l-[12px] border-lime-400 text-left shadow-sm mb-8">
-                                        <p className="text-xl leading-relaxed text-slate-700 font-medium mb-6">{LEARNING_SLIDES[lastViewedTense].desc}</p>
-                                        <div className="space-y-4">
-                                            {LEARNING_SLIDES[lastViewedTense].examples.map((ex, i) => (
-                                                <div key={i} className="bg-white p-4 rounded-xl border border-lime-100 shadow-sm">
-                                                    <div className="text-lime-700 font-black text-xl mb-1">{ex.s}</div>
-                                                    <div className="text-slate-500 italic text-sm font-semibold">{ex.t}</div>
-                                                </div>
-                                            ))}
-                                        </div>
+                                <h2 className="text-4xl font-black text-lime-600 mb-6">{LEARNING_SLIDES[lastViewedTense].title}</h2>
+                                <div className="bg-slate-50 p-8 rounded-3xl border-l-[12px] border-lime-400 text-left shadow-sm">
+                                    <p className="text-xl leading-relaxed text-slate-700 font-medium mb-6">{LEARNING_SLIDES[lastViewedTense].desc}</p>
+                                    <div className="space-y-4">
+                                        {LEARNING_SLIDES[lastViewedTense].examples.map((ex, i) => (
+                                            <div key={i} className="bg-white p-4 rounded-xl border border-lime-100">
+                                                <div className="text-lime-700 font-black text-xl">{ex.s}</div>
+                                                <div className="text-slate-500 italic text-sm">{ex.t}</div>
+                                            </div>
+                                        ))}
                                     </div>
-                                    <button onClick={() => setStep('quiz')} className="bg-lime-500 text-white font-black py-5 px-20 rounded-2xl text-xl shadow-2xl hover:bg-lime-600 transition-all active:scale-95 uppercase tracking-widest">Entendido, a practicar</button>
                                 </div>
+                                <button onClick={() => setStep('quiz')} className="bg-lime-500 text-white font-black py-5 px-20 rounded-2xl text-xl shadow-2xl hover:bg-lime-600 transition-all">Siguiente</button>
                             </div>
                         )}
 
                         {step === 'quiz' && (
                             <div className="p-8 flex-grow flex flex-col animate-in fade-in duration-300">
                                 <div className="flex justify-between items-center mb-10">
-                                    <span className="bg-lime-100 text-lime-700 px-6 py-2 rounded-full text-xs font-black uppercase border border-lime-200 tracking-widest">{QUESTIONS_RAW[currentIdx].tense}</span>
-                                    <span className="font-black text-slate-300 text-2xl tracking-tighter">{currentIdx + 1} / 50</span>
+                                    <span className="bg-lime-100 text-lime-700 px-6 py-2 rounded-full text-xs font-black uppercase border border-lime-200">{QUESTIONS_RAW[currentIdx].tense}</span>
+                                    <span className="font-black text-slate-300 text-2xl">{currentIdx + 1} / 50</span>
                                 </div>
-
                                 <div className="text-center mb-12">
-                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Traduce al español:</p>
-                                    <h2 className="text-4xl md:text-5xl font-black text-slate-900 leading-tight">{QUESTIONS_RAW[currentIdx].q}</h2>
+                                    <p className="text-xs font-bold text-slate-400 uppercase mb-3">Traduce:</p>
+                                    <h2 className="text-4xl md:text-5xl font-black text-slate-900">{QUESTIONS_RAW[currentIdx].q}</h2>
                                 </div>
-
-                                <div className="min-h-[100px] bg-slate-50 rounded-3xl border-4 border-dotted border-lime-200 mb-10 flex flex-wrap gap-2.5 p-6 items-center justify-center transition-all">
+                                <div className="min-h-[100px] bg-slate-50 rounded-3xl border-4 border-dotted border-lime-200 mb-10 flex flex-wrap gap-2.5 p-6 items-center justify-center">
                                     {(responses[currentIdx] || []).map((word, i) => (
-                                        <button key={`ans-${i}`} onClick={() => toggleWord(word)} className="bg-lime-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-lime-600 transition-all active:scale-90 text-lg border-b-4 border-lime-700">
-                                            {word}
-                                        </button>
+                                        <button key={i} onClick={() => toggleWord(word)} className="bg-lime-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg text-lg">{word}</button>
                                     ))}
-                                    {(responses[currentIdx] || []).length === 0 && <p className="text-slate-300 italic font-bold text-xl opacity-50">Toca las palabras para construir tu respuesta...</p>}
+                                    {(responses[currentIdx] || []).length === 0 && <p className="text-slate-300 italic font-bold text-xl opacity-50">Toca las palabras para responder...</p>}
                                 </div>
-
                                 <div className="flex flex-wrap gap-3 justify-center mb-auto">
                                     {QUESTIONS_RAW[currentIdx].shuffledWords.map((word, i) => {
                                         const used = (responses[currentIdx] || []).includes(word);
                                         return (
-                                            <button key={`word-${i}`} onClick={() => !used && toggleWord(word)} disabled={used} className={`px-6 py-4 rounded-2xl font-bold border-2 transition-all text-xl word-btn ${used ? 'bg-slate-50 text-slate-100 border-slate-50 opacity-20 scale-90' : 'bg-white border-lime-200 text-lime-600 hover:border-lime-500 hover:bg-lime-50 shadow-md'}`}>
-                                                {word}
-                                            </button>
+                                            <button key={i} onClick={() => !used && toggleWord(word)} disabled={used} className={`px-6 py-4 rounded-2xl font-bold border-2 transition-all text-xl ${used ? 'bg-slate-50 text-slate-100 border-slate-50 opacity-20' : 'bg-white border-lime-200 text-lime-600 hover:bg-lime-50 shadow-md'}`}>{word}</button>
                                         );
                                     })}
                                 </div>
-
                                 <div className="flex justify-between items-center mt-12 pt-8 border-t-2 border-slate-50">
-                                    <button onClick={() => currentIdx > 0 && setCurrentIdx(currentIdx-1)} disabled={currentIdx === 0} className="flex items-center gap-2 font-black text-slate-300 hover:text-lime-500 disabled:opacity-0 transition-colors uppercase tracking-widest text-sm">
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 19l-7-7 7-7" /></svg> Anterior
-                                    </button>
-                                    <button onClick={nextQuestion} disabled={isSubmitting} className="bg-slate-800 text-white px-16 py-5 rounded-3xl font-black flex items-center gap-3 shadow-2xl hover:bg-slate-900 transition-all active:scale-95 uppercase tracking-widest">
-                                        {isSubmitting ? 'Guardando...' : (currentIdx === 49 ? 'Finalizar Examen' : 'Siguiente')}
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7" /></svg>
+                                    <button onClick={() => currentIdx > 0 && setCurrentIdx(currentIdx-1)} disabled={currentIdx === 0} className="font-black text-slate-300 hover:text-lime-500 transition-colors uppercase text-sm">Anterior</button>
+                                    <button onClick={nextQuestion} disabled={isSubmitting} className="bg-slate-800 text-white px-16 py-5 rounded-3xl font-black shadow-2xl hover:bg-slate-900 transition-all active:scale-95 uppercase">
+                                        {isSubmitting ? 'Guardando...' : (currentIdx === 49 ? 'Finalizar' : 'Siguiente')}
                                     </button>
                                 </div>
                             </div>
@@ -450,17 +422,9 @@
 
                         {step === 'results' && (
                             <div className="p-16 flex-grow flex flex-col justify-center text-center space-y-10 animate-in zoom-in duration-700">
-                                <div className="w-32 h-32 bg-lime-100 rounded-full flex items-center justify-center mx-auto shadow-inner">
-                                    <svg className="w-16 h-16 text-lime-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d="M5 13l4 4L19 7" /></svg>
-                                </div>
-                                <div>
-                                    <h2 className="text-6xl font-black text-slate-900 mb-4 tracking-tighter uppercase">{QUIZ_TITLE}</h2>
-                                    <p className="text-2xl text-slate-500 font-medium max-w-lg mx-auto leading-relaxed">Tus resultados han sido sincronizados correctamente y se ha descargado el archivo CSV de respaldo.</p>
-                                </div>
-                                <button onClick={() => window.location.reload()} className="max-w-md mx-auto w-full flex items-center justify-center gap-4 bg-slate-800 text-white py-6 rounded-3xl font-black hover:bg-slate-900 transition-all shadow-2xl uppercase tracking-widest text-xl">
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                                    Reiniciar Sesión
-                                </button>
+                                <h2 className="text-6xl font-black text-slate-900 tracking-tighter uppercase">¡Terminado!</h2>
+                                <p className="text-2xl text-slate-500 font-medium max-w-lg mx-auto leading-relaxed">Tus resultados han sido procesados y el archivo CSV se ha descargado automáticamente.</p>
+                                <button onClick={() => window.location.reload()} className="max-w-md mx-auto w-full bg-slate-800 text-white py-6 rounded-3xl font-black hover:bg-slate-900 transition-all shadow-2xl uppercase tracking-widest text-xl">Reiniciar</button>
                             </div>
                         )}
                     </div>

@@ -41,6 +41,11 @@
         // --- CONFIGURACIÓN GLOBAL ---
         const QUIZ_TITLE = "Mastering the Verb 'Poner' - Spanish II";
         const apiKey = ""; 
+
+        // Definición global para evitar ReferenceErrors
+        window.isFirebaseAvailable = false;
+        window.db = null;
+        window.auth = null;
         
         const firebaseConfig = {
             apiKey: "",
@@ -51,25 +56,18 @@
             appId: ""
         };
 
-        // --- INICIALIZACIÓN DE FIREBASE CON FALLBACK ---
-        let db = null;
-        let auth = null;
-        let isFirebaseAvailable = false;
-
         try {
-            // Intentar usar configuración del entorno si existe, si no la local
             const config = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : firebaseConfig;
-            
             if (config && config.apiKey) {
                 if (!firebase.apps.length) {
                     firebase.initializeApp(config);
                 }
-                db = firebase.firestore();
-                auth = firebase.auth();
-                isFirebaseAvailable = true;
+                window.db = firebase.firestore();
+                window.auth = firebase.auth();
+                window.isFirebaseAvailable = true;
             }
         } catch (e) {
-            console.error("Firebase no disponible, usando modo local.");
+            console.error("Firebase no disponible.");
         }
 
         const internalAppId = typeof __app_id !== 'undefined' ? __app_id : 'poner-quiz-v1';
@@ -119,7 +117,7 @@
         const LEARNING_SLIDES = {
             [TENSES.PRESENT]: {
                 title: "Poner in the Indicative Present",
-                desc: "The verb 'poner' (to put/place) has an irregular 'Yo' form: 'Pongo'. For items you put on yourself, use the reflexive 'se', 'me', 'te'.",
+                desc: "The verb 'poner' (to put/place) has an irregular 'Yo' form: 'Pongo'. When talking about putting something on yourself, use 'me pongo', 'te pones', 'se pone'.",
                 examples: [
                     { s: "Yo pongo la sal en la mesa.", t: "Translation: I put the salt on the table." },
                     { s: "Él se pone el sombrero.", t: "Translation: He puts the hat on (himself)." }
@@ -152,6 +150,7 @@
         };
 
         const QUESTIONS_RAW = [
+            // PRESENT (1-12)
             { type: 'drag', q: "I put the salt on the table.", a: ["Yo", "pongo", "la", "sal", "en", "la", "mesa"], dist: ["puse", "pones", "poniendo"], tense: TENSES.PRESENT },
             { type: 'mcq', q: "Translation: 'We put the books away.'", a: "Nosotros ponemos los libros.", options: ["Nosotros ponemos los libros.", "Nosotros pusimos los libros.", "Nosotros pongo los libros.", "Nosotros ponen los libros."], tense: TENSES.PRESENT },
             { type: 'tf', q: "The 'Yo' form of poner in the present is 'Pongo'.", a: "True", tense: TENSES.PRESENT },
@@ -164,6 +163,8 @@
             { type: 'blank', q: "Él no ___ (put - present) atención en la clase.", a: ["pone"], tense: TENSES.PRESENT },
             { type: 'audio', q: "Identify audio.", audioText: "¿Qué pones en la mesa?", a: "What do you put on the table?", options: ["What did you put near the dining table?", "What do you put on the table?", "Who is putting the glasses on the table?", "Where do you put the flowers today?"], tense: TENSES.PRESENT },
             { type: 'drag', q: "We put the sugar in the coffee.", a: ["Nosotros", "ponemos", "el", "azúcar", "en", "el", "café"], dist: ["poniendo", "puse", "ponen"], tense: TENSES.PRESENT },
+
+            // PRETERITE (13-25)
             { type: 'drag', q: "I put the milk in the fridge.", a: ["Yo", "puse", "la", "leche", "en", "la", "nevera"], dist: ["pongo", "pusiste", "poniendo"], tense: TENSES.PRETERITE },
             { type: 'mcq', q: "They put the boxes in the car.", a: "Ellos pusieron las cajas en el coche.", options: ["Ellos ponen las cajas.", "Ellos pusieron las cajas en el coche.", "Ellos pusimos las cajas.", "Ellos puso las cajas."], tense: TENSES.PRETERITE },
             { type: 'tf', q: "Preterite stem is 'pus-'.", a: "True", tense: TENSES.PRETERITE },
@@ -172,23 +173,27 @@
             { type: 'drag', q: "Translate: 'We put the ornaments on the tree.'", a: ["Nosotros", "pusimos", "los", "adornos", "en", "el", "árbol"], dist: ["ponemos", "ponen", "puesto"], tense: TENSES.PRETERITE },
             { type: 'drag', q: "Did she put the money in the bag?", a: ["¿", "Puso", "ella", "el", "dinero", "en", "la", "bolsa", "?"], alt: ["¿", "Puso", "el", "dinero", "en", "la", "bolsa", "ella", "?"], dist: ["puse", "pone", "bolsa"], tense: TENSES.PRETERITE },
             { type: 'mcq', q: "Ustedes ___ the baggage.", a: "pusieron", options: ["puso", "pusieron", "pusimos", "ponen"], tense: TENSES.PRETERITE },
-            { type: 'tf', q: "'Pusimos' is plural.", a: "True", tense: TENSES.PRETERITE },
+            { type: 'tf', q: "'Pusimos' refers to 'We'.", a: "True", tense: TENSES.PRETERITE },
             { type: 'blank', q: "Él se ___ (put on - preterite) su chaqueta.", a: ["puso"], tense: TENSES.PRETERITE },
-            { type: 'audio', q: "Identify.", audioText: "¿Quién puso las llaves aquí?", a: "Who put the keys here?", options: ["Who puts the golden keys in this place?", "Who put the keys here?", "Where did you put the car keys today?", "What is the reason he put the keys here?"], tense: TENSES.PRETERITE },
+            { type: 'audio', q: "Identify audio.", audioText: "¿Quién puso las llaves aquí?", a: "Who put the keys here?", options: ["Who puts the golden keys in this place?", "Who put the keys here?", "Where did you put the car keys today?", "What is the reason he put the keys here?"], tense: TENSES.PRETERITE },
             { type: 'drag', q: "We didn't put any obstacles.", a: ["Nosotros", "no", "pusimos", "trabas", "en", "el", "camino"], dist: ["ponen", "puso", "poner"], tense: TENSES.PRETERITE },
             { type: 'drag', q: "Translate: 'I put the keys on the table.'", a: ["Yo", "puse", "las", "llaves", "en", "la", "mesa"], dist: ["pongo", "pusieron", "sobre"], tense: TENSES.PRETERITE },
+
+            // CONTINUOUS (26-37)
             { type: 'drag', q: "I am putting the clothes in the closet.", a: ["Estoy", "poniendo", "la", "ropa", "en", "el", "armario"], dist: ["puse", "pongo", "puesto"], tense: TENSES.CONTINUOUS },
             { type: 'mcq', q: "Translate: 'They are putting on the movie.'", a: "Están poniendo la película.", options: ["Están puesto la película.", "Están poniendo la película.", "Están ponen la película.", "Están pusimos la película."], tense: TENSES.CONTINUOUS },
             { type: 'tf', q: "The gerund is 'poniendo'.", a: "True", tense: TENSES.CONTINUOUS },
             { type: 'blank', q: "Tú ___ (are putting) las flores en el jarrón.", a: ["estás", "poniendo"], tense: TENSES.CONTINUOUS },
             { type: 'audio', q: "Identify audio.", audioText: "No estamos poniendo música ahora.", a: "We aren't putting music on now.", options: ["We don't put the loud music on the radio.", "We aren't putting music on now.", "They aren't putting the classical music now.", "I'm not putting any music in the living room."], tense: TENSES.CONTINUOUS },
             { type: 'drag', q: "Translate: 'He is putting the baby in the crib.'", a: ["Él", "está", "poniendo", "al", "bebé", "en", "la", "cuna"], dist: ["puse", "pone", "puesto"], tense: TENSES.CONTINUOUS },
-            { type: 'drag', q: "Are you all putting the chair in the corner?", a: ["¿", "Están", "ustedes", "poniendo", "la", "silla", "en", "la", "esquina", "?"], dist: ["puse", "ponen", "asiento"], tense: TENSES.CONTINUOUS },
+            { type: 'drag', q: "Are you all putting the chair in the corner?", a: ["¿", "Están", "ustedes", "poniendo", "la", "silla", "en", "la", "esquina", "?"], alt: ["¿", "Están", "poniendo", "ustedes", "la", "silla", "en", "la", "esquina", "?"], dist: ["puse", "ponen", "asiento"], tense: TENSES.CONTINUOUS },
             { type: 'mcq', q: "Ella ___ the star on the tree.", a: "está poniendo", options: ["está pone", "está puso", "está poniendo", "está ponen"], tense: TENSES.CONTINUOUS },
             { type: 'tf', q: "'Se' can come before 'está'.", a: "True", tense: TENSES.CONTINUOUS },
             { type: 'blank', q: "Usted ___ (are putting) las cartas en el buzón.", a: ["está", "poniendo"], tense: TENSES.CONTINUOUS },
             { type: 'audio', q: "Translate audio.", audioText: "¿Qué estás poniendo en la bolsa?", a: "What are you putting in the bag?", options: ["What did you put inside the school bag?", "What are you putting in the bag?", "Who is putting the heavy books in the bag?", "How are you putting the groceries in the bag?"], tense: TENSES.CONTINUOUS },
             { type: 'drag', q: "We are setting the table.", a: ["Estamos", "poniendo", "la", "mesa"], dist: ["puse", "puesto", "ponemos"], tense: TENSES.CONTINUOUS },
+
+            // FUTURE (38-50)
             { type: 'drag', q: "I am going to put the order in the system.", a: ["Yo", "voy", "a", "poner", "el", "pedido", "en", "el", "sistema"], dist: ["puse", "pongo", "irá"], tense: TENSES.FUTURE },
             { type: 'mcq', q: "They are going to put more lights.", a: "Van a poner más luces.", options: ["Van a puse más luces.", "Van a poner más luces.", "Van a pongo más luces.", "Van a pondrán más luces."], tense: TENSES.FUTURE },
             { type: 'tf', q: "Future uses 'ir + a + infinitive'.", a: "True", tense: TENSES.FUTURE },
@@ -204,27 +209,21 @@
             { type: 'drag', q: "Translate: 'He is going to put the trash out.'", a: ["Él", "va", "a", "poner", "la", "basura", "afuera"], dist: ["puse", "pongo", "dentro"], tense: TENSES.FUTURE }
         ];
 
-        // --- PROCESAMIENTO SEGURO ---
+        // --- PROCESAMIENTO ---
         const QUESTIONS = QUESTIONS_RAW.map((item, idx) => {
             const safeDist = Array.isArray(item.dist) ? item.dist : [];
             const safeA = Array.isArray(item.a) ? item.a : [];
             const safeAlt = Array.isArray(item.alt) ? item.alt : [];
-            
             let bank = [];
             if (item.type === 'drag') {
                 bank = [...safeA, ...safeAlt, ...safeDist].map((word, i) => ({ text: word, id: `w-${idx}-${i}` }));
                 bank.sort(() => Math.random() - 0.5);
             }
-
             let shuffledOptions = [];
-            if (item.options) {
-                shuffledOptions = [...item.options].sort(() => Math.random() - 0.5);
-            }
-
+            if (item.options) { shuffledOptions = [...item.options].sort(() => Math.random() - 0.5); }
             return { ...item, id: idx, bank, shuffledOptions };
         });
 
-        // --- APP COMPONENT ---
         function App() {
             const [user, setUser] = useState(null);
             const [step, setStep] = useState('auth'); 
@@ -236,44 +235,30 @@
             const [isSubmitting, setIsSubmitting] = useState(false);
             const [lastViewedTense, setLastViewedTense] = useState(null);
 
-            // Inicialización con Fallback Local
             useEffect(() => {
-                const init = async () => {
-                    try {
-                        if (isFirebaseAvailable && auth) {
-                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                                await auth.signInWithCustomToken(__initial_auth_token);
-                            } else {
-                                await auth.signInAnonymously();
-                            }
-                            auth.onAuthStateChanged(u => { if (u) setUser(u); });
-                        } else {
-                            // Modo Local si Firebase no está configurado
-                            console.warn("Usando modo local.");
-                            setUser({ uid: 'local-user' });
-                        }
-                    } catch (e) {
-                        setUser({ uid: 'local-user' });
-                    }
-                };
-                init();
+                const timer = setTimeout(() => {
+                    if (!user) setUser({ uid: 'local-' + Date.now() });
+                }, 1000);
+
+                if (window.isFirebaseAvailable && window.auth) {
+                    const unsub = window.auth.onAuthStateChanged(u => { if (u) setUser(u); });
+                    window.auth.signInAnonymously().catch(() => {});
+                    return () => { unsub(); clearTimeout(timer); };
+                } else {
+                    setUser({ uid: 'local-user' });
+                    clearTimeout(timer);
+                }
             }, []);
 
             const handleStart = async () => {
                 if (!form.firstName || !form.lastName || !form.email || !form.period) return;
-                
-                if (isFirebaseAvailable && db) {
+                if (window.isFirebaseAvailable && window.db && user && !user.uid.startsWith('local')) {
                     const emailId = form.email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
-                    const docPath = `artifacts/${internalAppId}/public/data/submissions/${emailId}`;
                     try {
-                        const docSnap = await db.doc(docPath).get();
-                        if (docSnap.exists) {
-                            alert("Ya has enviado este examen.");
-                            return;
-                        }
-                    } catch (err) { console.error(err); }
+                        const snap = await window.db.doc(`artifacts/${internalAppId}/public/data/submissions/${emailId}`).get();
+                        if (snap.exists) { alert("Ya has enviado este examen."); return; }
+                    } catch (e) {}
                 }
-                
                 setLastViewedTense(QUESTIONS[0].tense);
                 setStep('learn');
             };
@@ -311,7 +296,7 @@
                     } else if (q.type === 'blank') {
                         const userInp = normalizeText(typeof res === 'string' ? res : "");
                         correct = q.a.map(v => normalizeText(v)).includes(userInp);
-                    } else { correct = res === q.a; }
+                    } else { correct = normalizeText(res) === normalizeText(q.a); }
                     if (correct) scoreVal++;
                     return `${idx + 1}${correct ? 'r' : 'w'}`;
                 }).join(", ");
@@ -323,11 +308,11 @@
                     displayScore: `${scoreVal}/50`, cheatCount, resultsLog: log
                 };
 
-                if (isFirebaseAvailable && db) {
+                if (window.isFirebaseAvailable && window.db && user && !user.uid.startsWith('local')) {
                     try {
                         const emailId = form.email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
-                        await db.doc(`artifacts/${internalAppId}/public/data/submissions/${emailId}`).set(subData);
-                    } catch (err) { console.error(err); }
+                        await window.db.doc(`artifacts/${internalAppId}/public/data/submissions/${emailId}`).set(subData);
+                    } catch (e) {}
                 }
                 setStep('results');
                 downloadCSV(subData);
@@ -337,8 +322,9 @@
             const downloadCSV = (data) => {
                 const headers = ["Titulo", "Fecha", "Nombre", "Apellido", "Email", "Periodo", "Puntaje", "Log", "Trampas"];
                 const row = [data.title, data.timestamp, data.firstName, data.lastName, data.email, data.period, `'${data.displayScore}`, data.resultsLog, data.cheatCount].map(f => `"${f}"`).join(",");
+                const csv = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + row;
                 const link = document.createElement("a");
-                link.setAttribute("href", encodeURI("data:text/csv;charset=utf-8," + headers.join(",") + "\n" + row));
+                link.setAttribute("href", encodeURI(csv));
                 link.setAttribute("download", `results_poner_${data.lastName}.csv`);
                 document.body.appendChild(link);
                 link.click();
@@ -364,10 +350,12 @@
                         const audio = new Audio(URL.createObjectURL(blob));
                         audio.play();
                     }
-                } catch (e) { console.error(e); }
+                } catch (e) {}
             };
 
-            if (!user) return <div className="h-screen bg-lime-50 flex items-center justify-center font-bold text-lime-600 animate-pulse text-2xl uppercase tracking-widest text-center px-4">Sincronizando seguridad...</div>;
+            if (!user) return <div className="h-screen bg-lime-50 flex items-center justify-center font-bold text-lime-600 animate-pulse text-2xl uppercase tracking-widest px-4 text-center">Iniciando seguridad...</div>;
+
+            const q = QUESTIONS[currentIdx];
 
             return (
                 <div className="min-h-screen p-4 md:p-8 flex items-center justify-center">
@@ -375,7 +363,7 @@
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
                             <div className="bg-white rounded-3xl p-10 max-w-sm text-center shadow-2xl border-4 border-red-500">
                                 <h2 className="text-3xl font-black text-slate-900 mb-2 uppercase">¡ALERTA!</h2>
-                                <p className="text-slate-600 mb-6 font-medium">No cambies de pestaña. Se ha registrado el incidente.</p>
+                                <p className="text-slate-600 mb-6 font-medium">No cambies de pestaña.</p>
                                 <button onClick={() => setShowAlert(false)} className="w-full bg-red-500 text-white font-bold py-4 rounded-2xl shadow-lg">Continuar</button>
                             </div>
                         </div>
@@ -392,11 +380,11 @@
                                 <div className="max-w-md mx-auto w-full space-y-6">
                                     <h2 className="text-3xl font-black text-slate-900 text-center uppercase">Ingreso</h2>
                                     <div className="grid grid-cols-2 gap-4">
-                                        <input className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-medium" placeholder="Nombre" value={form.firstName} onChange={e => setForm({...form, firstName: e.target.value})} />
-                                        <input className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-medium" placeholder="Apellido" value={form.lastName} onChange={e => setForm({...form, lastName: e.target.value})} />
+                                        <input className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-medium shadow-sm" placeholder="Nombre" value={form.firstName} onChange={e => setForm({...form, firstName: e.target.value})} />
+                                        <input className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-medium shadow-sm" placeholder="Apellido" value={form.lastName} onChange={e => setForm({...form, lastName: e.target.value})} />
                                     </div>
-                                    <input className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-medium" placeholder="Email Estudiantil" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
-                                    <select className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-bold" value={form.period} onChange={e => setForm({...form, period: e.target.value})}>
+                                    <input className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-medium shadow-sm" placeholder="Email Estudiantil" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
+                                    <select className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-bold shadow-sm" value={form.period} onChange={e => setForm({...form, period: e.target.value})}>
                                         <option value="">Selecciona tu periodo...</option>
                                         {['1st', 'A2', 'A4', 'B3', 'B4', '5th'].map(p => <option key={p} value={p}>{p}</option>)}
                                     </select>
@@ -489,7 +477,7 @@
                                 <div className="flex justify-between items-center mt-12 pt-8 border-t-2 border-slate-100">
                                     <button onClick={() => currentIdx > 0 && setCurrentIdx(currentIdx-1)} disabled={currentIdx === 0} className="font-black text-slate-300 hover:text-lime-500 uppercase tracking-widest disabled:opacity-0 transition-colors">Atrás</button>
                                     <button onClick={nextQuestion} disabled={isSubmitting} className="bg-slate-800 text-white px-20 py-5 rounded-3xl font-black shadow-2xl hover:bg-slate-900 transition-all active:scale-95 uppercase tracking-widest text-lg">
-                                        {currentIdx === 49 ? 'Finalizar' : 'Siguiente'}
+                                        {isSubmitting ? 'Guardando...' : (currentIdx === 49 ? 'Finalizar' : 'Siguiente')}
                                     </button>
                                 </div>
                             </div>
@@ -502,7 +490,7 @@
                                 </div>
                                 <div>
                                     <h2 className="text-6xl font-black text-slate-900 tracking-tighter uppercase mb-4">¡LOGRADO!</h2>
-                                    <p className="text-2xl text-slate-500 font-medium max-w-lg mx-auto leading-relaxed">Tus resultados han sido guardados. El archivo CSV se ha descargado automáticamente.</p>
+                                    <p className="text-2xl text-slate-500 font-medium max-w-lg mx-auto leading-relaxed">Tus resultados han sido guardados.</p>
                                 </div>
                                 <button onClick={() => window.location.reload()} className="max-w-md mx-auto w-full bg-slate-800 text-white py-6 rounded-3xl font-black hover:bg-slate-900 transition-all shadow-2xl uppercase tracking-widest text-xl active:scale-95">Reiniciar</button>
                             </div>

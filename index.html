@@ -42,16 +42,37 @@
         const QUIZ_TITLE = "Mastering the Verb 'Poner' - Spanish II";
         const apiKey = ""; 
         
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
-            apiKey: "", authDomain: "", projectId: "", storageBucket: "", messagingSenderId: "", appId: ""
+        const firebaseConfig = {
+            apiKey: "",
+            authDomain: "",
+            projectId: "",
+            storageBucket: "",
+            messagingSenderId: "",
+            appId: ""
         };
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'poner-quiz-v1';
 
-        if (!firebase.apps.length && firebaseConfig.apiKey) {
-            firebase.initializeApp(firebaseConfig);
+        // --- INICIALIZACIÓN DE FIREBASE CON FALLBACK ---
+        let db = null;
+        let auth = null;
+        let isFirebaseAvailable = false;
+
+        try {
+            // Intentar usar configuración del entorno si existe, si no la local
+            const config = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : firebaseConfig;
+            
+            if (config && config.apiKey) {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(config);
+                }
+                db = firebase.firestore();
+                auth = firebase.auth();
+                isFirebaseAvailable = true;
+            }
+        } catch (e) {
+            console.error("Firebase no disponible, usando modo local.");
         }
-        const db = firebase.apps.length ? firebase.firestore() : null;
-        const auth = firebase.apps.length ? firebase.auth() : null;
+
+        const internalAppId = typeof __app_id !== 'undefined' ? __app_id : 'poner-quiz-v1';
 
         // --- UTILIDADES ---
         const normalizeText = (str) => {
@@ -87,7 +108,7 @@
             return combined;
         }
 
-        // --- CONTENIDO EDUCATIVO ---
+        // --- CONTENIDO ---
         const TENSES = {
             PRESENT: "Indicative Present",
             PRETERITE: "Indicative Preterite",
@@ -98,7 +119,7 @@
         const LEARNING_SLIDES = {
             [TENSES.PRESENT]: {
                 title: "Poner in the Indicative Present",
-                desc: "The verb 'poner' (to put/place) has an irregular 'Yo' form: 'Pongo'. When talking about putting something on yourself, use 'me pongo', 'te pones', 'se pone'.",
+                desc: "The verb 'poner' (to put/place) has an irregular 'Yo' form: 'Pongo'. For items you put on yourself, use the reflexive 'se', 'me', 'te'.",
                 examples: [
                     { s: "Yo pongo la sal en la mesa.", t: "Translation: I put the salt on the table." },
                     { s: "Él se pone el sombrero.", t: "Translation: He puts the hat on (himself)." }
@@ -131,7 +152,6 @@
         };
 
         const QUESTIONS_RAW = [
-            // PRESENT (1-12)
             { type: 'drag', q: "I put the salt on the table.", a: ["Yo", "pongo", "la", "sal", "en", "la", "mesa"], dist: ["puse", "pones", "poniendo"], tense: TENSES.PRESENT },
             { type: 'mcq', q: "Translation: 'We put the books away.'", a: "Nosotros ponemos los libros.", options: ["Nosotros ponemos los libros.", "Nosotros pusimos los libros.", "Nosotros pongo los libros.", "Nosotros ponen los libros."], tense: TENSES.PRESENT },
             { type: 'tf', q: "The 'Yo' form of poner in the present is 'Pongo'.", a: "True", tense: TENSES.PRESENT },
@@ -144,8 +164,6 @@
             { type: 'blank', q: "Él no ___ (put - present) atención en la clase.", a: ["pone"], tense: TENSES.PRESENT },
             { type: 'audio', q: "Identify audio.", audioText: "¿Qué pones en la mesa?", a: "What do you put on the table?", options: ["What did you put near the dining table?", "What do you put on the table?", "Who is putting the glasses on the table?", "Where do you put the flowers today?"], tense: TENSES.PRESENT },
             { type: 'drag', q: "We put the sugar in the coffee.", a: ["Nosotros", "ponemos", "el", "azúcar", "en", "el", "café"], dist: ["poniendo", "puse", "ponen"], tense: TENSES.PRESENT },
-
-            // PRETERITE (13-25)
             { type: 'drag', q: "I put the milk in the fridge.", a: ["Yo", "puse", "la", "leche", "en", "la", "nevera"], dist: ["pongo", "pusiste", "poniendo"], tense: TENSES.PRETERITE },
             { type: 'mcq', q: "They put the boxes in the car.", a: "Ellos pusieron las cajas en el coche.", options: ["Ellos ponen las cajas.", "Ellos pusieron las cajas en el coche.", "Ellos pusimos las cajas.", "Ellos puso las cajas."], tense: TENSES.PRETERITE },
             { type: 'tf', q: "Preterite stem is 'pus-'.", a: "True", tense: TENSES.PRETERITE },
@@ -159,8 +177,6 @@
             { type: 'audio', q: "Identify.", audioText: "¿Quién puso las llaves aquí?", a: "Who put the keys here?", options: ["Who puts the golden keys in this place?", "Who put the keys here?", "Where did you put the car keys today?", "What is the reason he put the keys here?"], tense: TENSES.PRETERITE },
             { type: 'drag', q: "We didn't put any obstacles.", a: ["Nosotros", "no", "pusimos", "trabas", "en", "el", "camino"], dist: ["ponen", "puso", "poner"], tense: TENSES.PRETERITE },
             { type: 'drag', q: "Translate: 'I put the keys on the table.'", a: ["Yo", "puse", "las", "llaves", "en", "la", "mesa"], dist: ["pongo", "pusieron", "sobre"], tense: TENSES.PRETERITE },
-
-            // CONTINUOUS (26-37)
             { type: 'drag', q: "I am putting the clothes in the closet.", a: ["Estoy", "poniendo", "la", "ropa", "en", "el", "armario"], dist: ["puse", "pongo", "puesto"], tense: TENSES.CONTINUOUS },
             { type: 'mcq', q: "Translate: 'They are putting on the movie.'", a: "Están poniendo la película.", options: ["Están puesto la película.", "Están poniendo la película.", "Están ponen la película.", "Están pusimos la película."], tense: TENSES.CONTINUOUS },
             { type: 'tf', q: "The gerund is 'poniendo'.", a: "True", tense: TENSES.CONTINUOUS },
@@ -173,8 +189,6 @@
             { type: 'blank', q: "Usted ___ (are putting) las cartas en el buzón.", a: ["está", "poniendo"], tense: TENSES.CONTINUOUS },
             { type: 'audio', q: "Translate audio.", audioText: "¿Qué estás poniendo en la bolsa?", a: "What are you putting in the bag?", options: ["What did you put inside the school bag?", "What are you putting in the bag?", "Who is putting the heavy books in the bag?", "How are you putting the groceries in the bag?"], tense: TENSES.CONTINUOUS },
             { type: 'drag', q: "We are setting the table.", a: ["Estamos", "poniendo", "la", "mesa"], dist: ["puse", "puesto", "ponemos"], tense: TENSES.CONTINUOUS },
-
-            // FUTURE (38-50)
             { type: 'drag', q: "I am going to put the order in the system.", a: ["Yo", "voy", "a", "poner", "el", "pedido", "en", "el", "sistema"], dist: ["puse", "pongo", "irá"], tense: TENSES.FUTURE },
             { type: 'mcq', q: "They are going to put more lights.", a: "Van a poner más luces.", options: ["Van a puse más luces.", "Van a poner más luces.", "Van a pongo más luces.", "Van a pondrán más luces."], tense: TENSES.FUTURE },
             { type: 'tf', q: "Future uses 'ir + a + infinitive'.", a: "True", tense: TENSES.FUTURE },
@@ -190,7 +204,7 @@
             { type: 'drag', q: "Translate: 'He is going to put the trash out.'", a: ["Él", "va", "a", "poner", "la", "basura", "afuera"], dist: ["puse", "pongo", "dentro"], tense: TENSES.FUTURE }
         ];
 
-        // --- PROCESAMIENTO ---
+        // --- PROCESAMIENTO SEGURO ---
         const QUESTIONS = QUESTIONS_RAW.map((item, idx) => {
             const safeDist = Array.isArray(item.dist) ? item.dist : [];
             const safeA = Array.isArray(item.a) ? item.a : [];
@@ -210,6 +224,7 @@
             return { ...item, id: idx, bank, shuffledOptions };
         });
 
+        // --- APP COMPONENT ---
         function App() {
             const [user, setUser] = useState(null);
             const [step, setStep] = useState('auth'); 
@@ -220,41 +235,45 @@
             const [showAlert, setShowAlert] = useState(false);
             const [isSubmitting, setIsSubmitting] = useState(false);
             const [lastViewedTense, setLastViewedTense] = useState(null);
-            const [isLoadingMedia, setIsLoadingMedia] = useState(false);
 
+            // Inicialización con Fallback Local
             useEffect(() => {
-                const initAuth = async () => {
+                const init = async () => {
                     try {
-                        if (auth) {
+                        if (isFirebaseAvailable && auth) {
                             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                                 await auth.signInWithCustomToken(__initial_auth_token);
                             } else {
                                 await auth.signInAnonymously();
                             }
+                            auth.onAuthStateChanged(u => { if (u) setUser(u); });
+                        } else {
+                            // Modo Local si Firebase no está configurado
+                            console.warn("Usando modo local.");
+                            setUser({ uid: 'local-user' });
                         }
-                    } catch (e) { console.error("Auth init error:", e); }
+                    } catch (e) {
+                        setUser({ uid: 'local-user' });
+                    }
                 };
-                initAuth();
-                const unsub = auth?.onAuthStateChanged(u => { if (u) setUser(u); });
-                return () => unsub && unsub();
+                init();
             }, []);
 
-            useEffect(() => {
-                const handleVisibility = () => { if (document.hidden && step === 'quiz') { setCheatCount(c => c + 1); setShowAlert(true); } };
-                document.addEventListener("visibilitychange", handleVisibility);
-                return () => document.removeEventListener("visibilitychange", handleVisibility);
-            }, [step]);
-
             const handleStart = async () => {
-                if (!form.firstName || !form.lastName || !form.email || !form.period || !user) return;
-                if (db) {
+                if (!form.firstName || !form.lastName || !form.email || !form.period) return;
+                
+                if (isFirebaseAvailable && db) {
                     const emailId = form.email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
-                    const docPath = `artifacts/${appId}/public/data/submissions/${emailId}`;
+                    const docPath = `artifacts/${internalAppId}/public/data/submissions/${emailId}`;
                     try {
                         const docSnap = await db.doc(docPath).get();
-                        if (docSnap.exists) { alert("Acceso denegado: Ya has enviado este examen."); return; }
-                    } catch (err) { console.error("Firestore Check Error", err); }
+                        if (docSnap.exists) {
+                            alert("Ya has enviado este examen.");
+                            return;
+                        }
+                    } catch (err) { console.error(err); }
                 }
+                
                 setLastViewedTense(QUESTIONS[0].tense);
                 setStep('learn');
             };
@@ -285,18 +304,14 @@
                     let correct = false;
                     const res = responses[idx];
                     if (!res) return `${idx + 1}w`;
-                    
                     if (q.type === 'drag') {
                         const userStr = normalizeText(res.map(w => w.text).join(" "));
                         const variations = [q.a.join(" "), q.alt?.join(" ")].filter(Boolean).map(v => normalizeText(v));
                         correct = variations.includes(userStr);
                     } else if (q.type === 'blank') {
                         const userInp = normalizeText(typeof res === 'string' ? res : "");
-                        const possibleAnswers = q.a.map(v => normalizeText(v));
-                        correct = possibleAnswers.includes(userInp);
-                    } else {
-                        correct = res === q.a;
-                    }
+                        correct = q.a.map(v => normalizeText(v)).includes(userInp);
+                    } else { correct = res === q.a; }
                     if (correct) scoreVal++;
                     return `${idx + 1}${correct ? 'r' : 'w'}`;
                 }).join(", ");
@@ -305,15 +320,14 @@
                     title: QUIZ_TITLE, timestamp: new Date().toLocaleString(),
                     firstName: form.firstName, lastName: form.lastName,
                     email: form.email, period: form.period,
-                    displayScore: `${scoreVal}/50`, cheatCount, resultsLog: log,
-                    userId: user.uid
+                    displayScore: `${scoreVal}/50`, cheatCount, resultsLog: log
                 };
 
-                if (db) {
+                if (isFirebaseAvailable && db) {
                     try {
                         const emailId = form.email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
-                        await db.doc(`artifacts/${appId}/public/data/submissions/${emailId}`).set(subData);
-                    } catch (err) { console.error("Cloud Save Error:", err); }
+                        await db.doc(`artifacts/${internalAppId}/public/data/submissions/${emailId}`).set(subData);
+                    } catch (err) { console.error(err); }
                 }
                 setStep('results');
                 downloadCSV(subData);
@@ -323,9 +337,8 @@
             const downloadCSV = (data) => {
                 const headers = ["Titulo", "Fecha", "Nombre", "Apellido", "Email", "Periodo", "Puntaje", "Log", "Trampas"];
                 const row = [data.title, data.timestamp, data.firstName, data.lastName, data.email, data.period, `'${data.displayScore}`, data.resultsLog, data.cheatCount].map(f => `"${f}"`).join(",");
-                const csv = headers.join(",") + "\n" + row;
                 const link = document.createElement("a");
-                link.setAttribute("href", encodeURI("data:text/csv;charset=utf-8," + csv));
+                link.setAttribute("href", encodeURI("data:text/csv;charset=utf-8," + headers.join(",") + "\n" + row));
                 link.setAttribute("download", `results_poner_${data.lastName}.csv`);
                 document.body.appendChild(link);
                 link.click();
@@ -333,8 +346,6 @@
             };
 
             const handlePlayAudio = async (text) => {
-                if (isLoadingMedia) return;
-                setIsLoadingMedia(true);
                 try {
                     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`, {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -354,18 +365,9 @@
                         audio.play();
                     }
                 } catch (e) { console.error(e); }
-                setIsLoadingMedia(false);
             };
 
-            useEffect(() => {
-                const handleKey = (e) => { if (e.key === 'Enter') { if (step === 'quiz') nextQuestion(); else if (step === 'learn') setStep('quiz'); } };
-                window.addEventListener('keydown', handleKey);
-                return () => window.removeEventListener('keydown', handleKey);
-            }, [currentIdx, responses, step]);
-
-            if (!user) return <div className="h-screen bg-lime-50 flex items-center justify-center font-bold text-lime-600 animate-pulse text-2xl uppercase tracking-widest px-4 text-center">Iniciando seguridad...</div>;
-
-            const q = QUESTIONS[currentIdx];
+            if (!user) return <div className="h-screen bg-lime-50 flex items-center justify-center font-bold text-lime-600 animate-pulse text-2xl uppercase tracking-widest text-center px-4">Sincronizando seguridad...</div>;
 
             return (
                 <div className="min-h-screen p-4 md:p-8 flex items-center justify-center">
@@ -373,13 +375,13 @@
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
                             <div className="bg-white rounded-3xl p-10 max-w-sm text-center shadow-2xl border-4 border-red-500">
                                 <h2 className="text-3xl font-black text-slate-900 mb-2 uppercase">¡ALERTA!</h2>
-                                <p className="text-slate-600 mb-6 font-medium text-lg">No cambies de pestaña. Se ha registrado el incidente.</p>
+                                <p className="text-slate-600 mb-6 font-medium">No cambies de pestaña. Se ha registrado el incidente.</p>
                                 <button onClick={() => setShowAlert(false)} className="w-full bg-red-500 text-white font-bold py-4 rounded-2xl shadow-lg">Continuar</button>
                             </div>
                         </div>
                     )}
 
-                    <div className="max-w-4xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-lime-100 min-h-[600px] flex flex-col relative bg-pattern shadow-lime-200/50">
+                    <div className="max-w-4xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-lime-100 min-h-[600px] flex flex-col relative bg-pattern">
                         <div className="bg-lime-500 p-6 text-white flex justify-between items-center shadow-md">
                             <h1 className="text-xl font-black uppercase tracking-widest">{QUIZ_TITLE}</h1>
                             {step === 'quiz' && <div className="bg-white/20 px-4 py-1 rounded-full text-sm font-bold">Paso {currentIdx + 1} de 50</div>}
@@ -390,11 +392,11 @@
                                 <div className="max-w-md mx-auto w-full space-y-6">
                                     <h2 className="text-3xl font-black text-slate-900 text-center uppercase">Ingreso</h2>
                                     <div className="grid grid-cols-2 gap-4">
-                                        <input className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-medium shadow-sm" placeholder="Nombre" value={form.firstName} onChange={e => setForm({...form, firstName: e.target.value})} />
-                                        <input className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-medium shadow-sm" placeholder="Apellido" value={form.lastName} onChange={e => setForm({...form, lastName: e.target.value})} />
+                                        <input className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-medium" placeholder="Nombre" value={form.firstName} onChange={e => setForm({...form, firstName: e.target.value})} />
+                                        <input className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-medium" placeholder="Apellido" value={form.lastName} onChange={e => setForm({...form, lastName: e.target.value})} />
                                     </div>
-                                    <input className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-medium shadow-sm" placeholder="Email Estudiantil" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
-                                    <select className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-bold shadow-sm" value={form.period} onChange={e => setForm({...form, period: e.target.value})}>
+                                    <input className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-medium" placeholder="Email Estudiantil" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
+                                    <select className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-bold" value={form.period} onChange={e => setForm({...form, period: e.target.value})}>
                                         <option value="">Selecciona tu periodo...</option>
                                         {['1st', 'A2', 'A4', 'B3', 'B4', '5th'].map(p => <option key={p} value={p}>{p}</option>)}
                                     </select>
@@ -432,9 +434,9 @@
 
                                 {q.type === 'audio' && (
                                     <div className="flex justify-center mb-8">
-                                        <button onClick={() => handlePlayAudio(q.audioText)} disabled={isLoadingMedia} className="bg-slate-800 text-white p-8 rounded-full hover:bg-slate-700 shadow-2xl flex items-center gap-4 active:scale-90 disabled:opacity-50 transition-all">
+                                        <button onClick={() => handlePlayAudio(q.audioText)} className="bg-slate-800 text-white p-8 rounded-full hover:bg-slate-700 shadow-2xl flex items-center gap-4 active:scale-90 transition-all">
                                             <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 20 20"><path d="M11 5L6 9H2v2h4l5 4V5zM14.5 10c0-1.5-1-2.5-1-2.5v5s1-1 1-2.5z"/></svg>
-                                            <span className="text-xl font-black uppercase tracking-widest">{isLoadingMedia ? "Cargando..." : "Play Audio"}</span>
+                                            <span className="text-xl font-black uppercase tracking-widest text-white">Play Audio</span>
                                         </button>
                                     </div>
                                 )}

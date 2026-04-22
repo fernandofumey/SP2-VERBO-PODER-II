@@ -1,544 +1,375 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dominando 'Poner' - Examen Interactivo</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- React y Babel -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Firebase Compat -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
-        body { font-family: 'Inter', sans-serif; overflow-x: hidden; margin: 0; padding: 0; }
-        .word-btn { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
-        .word-btn:active { transform: scale(0.95); }
-        .learning-card { animation: slideIn 0.5s ease-out; }
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateX(20px); }
-            to { opacity: 1; transform: translateX(0); }
+import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, doc, setDoc, getDoc } from 'firebase/firestore';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { ChevronLeft, ChevronRight, AlertCircle, RefreshCw, BookOpen, GraduationCap } from 'lucide-react';
+
+// --- CONFIGURACIÓN ---
+const QUIZ_TITLE = "Mastering 'Poder' - Spanish II";
+
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'poder-mastery-v4';
+
+// --- CONTENIDO ---
+const TENSES = {
+  PRESENT: "Indicative Present",
+  PRETERITE: "Indicative Preterite",
+  FUTURE: "Indicative Informal Future",
+  PERFECT: "Indicative Present Perfect"
+};
+
+const LEARNING_SLIDES = {
+  [TENSES.PRESENT]: {
+    title: "Poder in the Indicative Present",
+    desc: "The Indicative Present is used to talk about current abilities or facts. To make it negative, place 'no' before the verb.",
+    examples: [
+      { s: "Puedo hablar español.", t: "Translation: I can speak Spanish." },
+      { s: "No podemos ir.", t: "Translation: We cannot go." }
+    ]
+  },
+  [TENSES.PRETERITE]: {
+    title: "Poder in the Indicative Preterite",
+    desc: "The Preterite is used for past actions that were completed. 'Pude' often means 'I managed to'.",
+    examples: [
+      { s: "Pude terminar la tarea.", t: "Translation: I managed to finish the homework." }
+    ]
+  },
+  [TENSES.FUTURE]: {
+    title: "Poder in the Informal Future (Ir + a + Poder)",
+    desc: "Uses 'Ir + a + Poder' to say what someone 'is going to be able to' do.",
+    examples: [
+      { s: "Voy a poder ir.", t: "Translation: I am going to be able to go." }
+    ]
+  },
+  [TENSES.PERFECT]: {
+    title: "Poder in the Present Perfect",
+    desc: "Uses 'Haber + Podido' to connect the past with the present. 'Podido' never changes.",
+    examples: [
+      { s: "He podido dormir.", t: "Translation: I have been able to sleep." }
+    ]
+  }
+};
+
+const QUESTIONS_RAW = [
+  // PRESENT (12)
+  { q: "I can study.", a: ["Yo", "puedo", "estudiar"], alt: ["Puedo", "estudiar"], tense: TENSES.PRESENT, dist: ["podemos", "puedes"] },
+  { q: "You (inf) cannot run.", a: ["Tú", "no", "puedes", "correr"], alt: ["No", "puedes", "correr"], tense: TENSES.PRESENT, dist: ["puedo", "puede"] },
+  { q: "Can he help?", a: ["¿", "Él", "puede", "ayudar", "?"], alt: ["¿", "Puede", "él", "ayudar", "?"], tense: TENSES.PRESENT, dist: ["pueden", "pude"] },
+  { q: "We can sing.", a: ["Nosotros", "podemos", "cantar"], alt: ["Podemos", "cantar"], tense: TENSES.PRESENT, dist: ["pueden", "puedo"] },
+  { q: "They cannot speak.", a: ["Ellos", "no", "pueden", "hablar"], alt: ["No", "pueden", "hablar"], tense: TENSES.PRESENT, dist: ["puede", "podemos"] },
+  { q: "Can she dance?", a: ["¿", "Ella", "puede", "bailar", "?"], alt: ["¿", "Puede", "ella", "bailar", "?"], tense: TENSES.PRESENT, dist: ["puedes", "pudo"] },
+  { q: "You (formal) can wait.", a: ["Usted", "puede", "esperar"], alt: ["Puede", "esperar"], tense: TENSES.PRESENT, dist: ["puedes", "pueden"] },
+  { q: "Can you all play?", a: ["¿", "Ustedes", "pueden", "jugar", "?"], alt: ["¿", "Pueden", "ustedes", "jugar", "?"], tense: TENSES.PRESENT, dist: ["puedo", "puede"] },
+  { q: "We cannot cook.", a: ["Nosotros", "no", "podemos", "cocinar"], alt: ["No", "podemos", "cocinar"], tense: TENSES.PRESENT, dist: ["pueden", "puedes"] },
+  { q: "I can work.", a: ["Yo", "puedo", "trabajar"], alt: ["Puedo", "trabajar"], tense: TENSES.PRESENT, dist: ["pude", "pudieron"] },
+  { q: "Can they swim?", a: ["¿", "Ellos", "pueden", "nadar", "?"], alt: ["¿", "Pueden", "ellos", "nadar", "?"], tense: TENSES.PRESENT, dist: ["pudo", "pude"] },
+  { q: "He cannot read.", a: ["Él", "no", "puede", "leer"], alt: ["No", "puede", "leer"], tense: TENSES.PRESENT, dist: ["pueden", "pudo"] },
+  
+  // PRETERITE (13)
+  { q: "I managed to go.", a: ["Yo", "pude", "ir"], alt: ["Pude", "ir"], tense: TENSES.PRETERITE, dist: ["puedo", "podía"] },
+  { q: "You (inf) did not manage to read.", a: ["Tú", "no", "pudiste", "leer"], alt: ["No", "pudiste", "leer"], tense: TENSES.PRETERITE, dist: ["puedes", "pudo"] },
+  { q: "Did she manage to finish?", a: ["¿", "Ella", "pudo", "terminar", "?"], alt: ["¿", "Pudo", "ella", "terminar", "?"], tense: TENSES.PRETERITE, dist: ["pude", "pudieron"] },
+  { q: "We managed to win.", a: ["Nosotros", "pudimos", "ganar"], alt: ["Pudimos", "ganar"], tense: TENSES.PRETERITE, dist: ["pueden", "podemos"] },
+  { q: "They did not manage to see.", a: ["Ellos", "no", "pudieron", "ver"], alt: ["No", "pudieron", "ver"], tense: TENSES.PRETERITE, dist: ["pudo", "pude"] },
+  { q: "Did you (formal) manage to arrive?", a: ["¿", "Usted", "pudo", "llegar", "?"], alt: ["¿", "Pudo", "usted", "llegar", "?"], tense: TENSES.PRETERITE, dist: ["puedes", "pudiste"] },
+  { q: "He managed to understand.", a: ["Él", "pudo", "entender"], alt: ["Pudo", "entender"], tense: TENSES.PRETERITE, dist: ["pude", "puedo"] },
+  { q: "I did not manage to eat.", a: ["Yo", "no", "pude", "comer"], alt: ["No", "pude", "comer"], tense: TENSES.PRETERITE, dist: ["puedo", "podemos"] },
+  { q: "Did we manage to swim?", a: ["¿", "Nosotros", "pudimos", "nadar", "?"], alt: ["¿", "Pudimos", "nosotros", "nadar", "?"], tense: TENSES.PRETERITE, dist: ["pudo", "pueden"] },
+  { q: "They managed to hear.", a: ["Ellos", "pudieron", "oír"], alt: ["Pudieron", "oír"], tense: TENSES.PRETERITE, dist: ["pudo", "pudimos"] },
+  { q: "Did you (inf) manage to dance?", a: ["¿", "Tú", "pudiste", "bailar", "?"], alt: ["¿", "Pudiste", "tú", "bailar", "?"], tense: TENSES.PRETERITE, dist: ["puedes", "pudo"] },
+  { q: "She did not manage to wait.", a: ["Ella", "no", "pudo", "esperar"], alt: ["No", "pudo", "esperar"], tense: TENSES.PRETERITE, dist: ["pude", "pudiste"] },
+  { q: "We managed to talk.", a: ["Nosotros", "pudimos", "hablar"], alt: ["Pudimos", "hablar"], tense: TENSES.PRETERITE, dist: ["puden", "pudo"] },
+
+  // FUTURE (12)
+  { q: "I am going to be able to go.", a: ["Yo", "voy", "a", "poder", "ir"], alt: ["Voy", "a", "poder", "ir"], tense: TENSES.FUTURE, dist: ["puedo", "vas"] },
+  { q: "You (inf) are not going to be able to talk.", a: ["Tú", "no", "vas", "a", "poder", "hablar"], alt: ["No", "vas", "a", "poder", "hablar"], tense: TENSES.FUTURE, dist: ["va", "voy"] },
+  { q: "Is he going to be able to run?", a: ["¿", "Él", "va", "a", "poder", "correr", "?"], alt: ["¿", "Va", "él", "a", "poder", "correr", "?"], tense: TENSES.FUTURE, dist: ["vamos", "pude"] },
+  { q: "We are going to be able to study.", a: ["Nosotros", "vamos", "a", "poder", "estudiar"], alt: ["Vamos", "a", "poder", "estudiar"], tense: TENSES.FUTURE, dist: ["van", "puedo"] },
+  { q: "They are not going to be able to finish.", a: ["Ellos", "no", "van", "a", "poder", "terminar"], alt: ["No", "van", "a", "poder", "terminar"], tense: TENSES.FUTURE, dist: ["vas", "pudieron"] },
+  { q: "Is she going to be able to start?", a: ["¿", "Ella", "va", "a", "poder", "empezar", "?"], alt: ["¿", "Va", "ella", "a", "poder", "empezar", "?"], tense: TENSES.FUTURE, dist: ["voy", "puedes"] },
+  { q: "You (formal) are going to be able to win.", a: ["Usted", "va", "a", "poder", "ganar"], alt: ["Va", "a", "poder", "ganar"], tense: TENSES.FUTURE, dist: ["van", "vas"] },
+  { q: "Are you all going to be able to fly?", a: ["¿", "Ustedes", "van", "a", "poder", "volar", "?"], alt: ["¿", "Van", "ustedes", "a", "poder", "volar", "?"], tense: TENSES.FUTURE, dist: ["vamos", "pudo"] },
+  { q: "We are not going to be able to clean.", a: ["Nosotros", "no", "vamos", "a", "poder", "limpiar"], alt: ["No", "vamos", "a", "poder", "limpiar"], tense: TENSES.FUTURE, dist: ["van", "pude"] },
+  { q: "I am going to be able to rest.", a: ["Yo", "voy", "a", "poder", "descansar"], alt: ["Voy", "a", "poder", "descansar"], tense: TENSES.FUTURE, dist: ["vas", "puedo"] },
+  { q: "Are they going to be able to play?", a: ["¿", "Ellos", "van", "a", "poder", "jugar", "?"], alt: ["¿", "Van", "ellos", "a", "poder", "jugar", "?"], tense: TENSES.FUTURE, dist: ["vamos", "pudo"] },
+  { q: "He is not going to be able to help.", a: ["Él", "no", "va", "a", "poder", "ayudar"], alt: ["No", "va", "a", "poder", "ayudar"], tense: TENSES.FUTURE, dist: ["voy", "pudiste"] },
+
+  // PERFECT (13)
+  { q: "I have been able to help.", a: ["Yo", "he", "podido", "ayudar"], alt: ["He", "podido", "ayudar"], tense: TENSES.PERFECT, dist: ["ha", "pude"] },
+  { q: "You (inf) have not been able to sleep.", a: ["Tú", "no", "has", "podido", "dormir"], alt: ["No", "has", "podido", "dormir"], tense: TENSES.PERFECT, dist: ["hemos", "puedes"] },
+  { q: "Has he been able to read?", a: ["¿", "Él", "ha", "podido", "leer", "?"], alt: ["¿", "Ha", "él", "podido", "leer", "?"], tense: TENSES.PERFECT, dist: ["han", "pude"] },
+  { q: "We have been able to arrive.", a: ["Nosotros", "hemos", "podido", "llegar"], alt: ["Hemos", "podido", "llegar"], tense: TENSES.PERFECT, dist: ["ha", "podemos"] },
+  { q: "They have not been able to find.", a: ["Ellos", "no", "han", "podido", "encontrar"], alt: ["No", "han", "podido", "encontrar"], tense: TENSES.PERFECT, dist: ["he", "pudieron"] },
+  { q: "Has she been able to choose?", a: ["¿", "Ella", "ha", "podido", "elegir", "?"], alt: ["¿", "Ha", "ella", "podido", "elegir", "?"], tense: TENSES.PERFECT, dist: ["has", "puedo"] },
+  { q: "You (formal) have been able to wait.", a: ["Usted", "ha", "podido", "esperar"], alt: ["Ha", "podido", "esperar"], tense: TENSES.PERFECT, dist: ["han", "hemos"] },
+  { q: "Have you all been able to jump?", a: ["¿", "Ustedes", "han", "podido", "saltar", "?"], alt: ["¿", "Han", "ustedes", "podido", "saltar", "?"], tense: TENSES.PERFECT, dist: ["has", "pudo"] },
+  { q: "We have not been able to understand.", a: ["Nosotros", "no", "hemos", "podido", "entender"], alt: ["No", "hemos", "podido", "entender"], tense: TENSES.PERFECT, dist: ["ha", "pueden"] },
+  { q: "I have been able to dream.", a: ["Yo", "he", "podido", "soñar"], alt: ["He", "podido", "soñar"], tense: TENSES.PERFECT, dist: ["has", "pudimos"] },
+  { q: "Have they been able to stay?", a: ["¿", "Ellos", "han", "podido", "quedarse", "?"], alt: ["¿", "Han", "ellos", "podido", "quedarse", "?"], tense: TENSES.PERFECT, dist: ["hemos", "puedo"] },
+  { q: "She has not been able to cook.", a: ["Ella", "no", "ha", "podido", "cocinar"], alt: ["No", "ha", "podido", "cocinar"], tense: TENSES.PERFECT, dist: ["han", "pude"] },
+  { q: "Have you (inf) been able to eat?", a: ["¿", "Tú", "has", "podido", "comer", "?"], alt: ["¿", "Has", "tú", "podido", "comer", "?"], tense: TENSES.PERFECT, dist: ["he", "puede"] }
+].map((item, idx) => ({
+  id: idx,
+  ...item,
+  shuffledWords: Array.from(new Set([...item.a, ...(item.alt || []), ...item.dist])).sort(() => Math.random() - 0.5)
+}));
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [step, setStep] = useState('auth'); 
+  const [form, setForm] = useState({ firstName: '', lastName: '', email: '', period: '' });
+  const [currentIdx, setCurrentIdx] = useState(0);
+  const [responses, setResponses] = useState({}); 
+  const [cheatCount, setCheatCount] = useState(0);
+  const [showAlert, setShowAlert] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lastViewedTense, setLastViewedTense] = useState(null);
+
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
         }
-        .bg-pattern {
-            background-color: #f7fee7;
-            background-image: radial-gradient(#d9f99d 1px, transparent 1px);
-            background-size: 20px 20px;
-        }
-        .quiz-container { min-height: 600px; }
-    </style>
-</head>
-<body class="bg-pattern text-slate-800">
-    <div id="root"></div>
+      } catch (err) { console.error("Auth error:", err); }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
 
-    <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden && step === 'quiz') {
+        setCheatCount(prev => prev + 1);
+        setShowAlert(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [step]);
 
-        // --- CONFIGURACIÓN GLOBAL ---
-        const QUIZ_TITLE = "Mastering the Verb 'Poner' - Spanish II";
-        const apiKey = ""; // Se inyecta en el entorno; en GitHub fallará y usará fallback de voz local.
+  const handleStart = async () => {
+    if (!form.firstName || !form.lastName || !form.email || !form.period) return;
+    const emailId = form.email.trim().toLowerCase();
+    try {
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'submissions', emailId);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        alert("You have already submitted this quiz.");
+        return;
+      }
+      setLastViewedTense(QUESTIONS_RAW[0].tense);
+      setStep('learn');
+    } catch (err) { console.error(err); }
+  };
 
-        // Variables globales para Firebase
-        window.isFirebaseAvailable = false;
-        window.db = null;
-        window.auth = null;
-        
-        const firebaseConfig = {
-            apiKey: "",
-            authDomain: "",
-            projectId: "",
-            storageBucket: "",
-            messagingSenderId: "",
-            appId: ""
-        };
+  const toggleWord = (word) => {
+    const currentAns = responses[currentIdx] || [];
+    if (currentAns.includes(word)) {
+      setResponses({ ...responses, [currentIdx]: currentAns.filter(w => w !== word) });
+    } else {
+      setResponses({ ...responses, [currentIdx]: [...currentAns, word] });
+    }
+  };
 
-        try {
-            const config = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : firebaseConfig;
-            if (config && config.apiKey) {
-                if (!firebase.apps.length) firebase.initializeApp(config);
-                window.db = firebase.firestore();
-                window.auth = firebase.auth();
-                window.isFirebaseAvailable = true;
-            }
-        } catch (e) {
-            console.warn("Firebase no configurado, operando en modo local.");
-        }
+  const nextQuestion = () => {
+    const nextIdx = currentIdx + 1;
+    if (nextIdx < QUESTIONS_RAW.length) {
+      const currentTense = QUESTIONS_RAW[currentIdx].tense;
+      const nextTense = QUESTIONS_RAW[nextIdx].tense;
+      setCurrentIdx(nextIdx);
+      if (nextTense !== currentTense) {
+        setLastViewedTense(nextTense);
+        setStep('learn');
+      }
+    } else {
+      submitQuiz();
+    }
+  };
 
-        const internalAppId = typeof __app_id !== 'undefined' ? __app_id : 'poner-quiz-v1';
+  const submitQuiz = async () => {
+    if (!user) return;
+    setIsSubmitting(true);
+    
+    // --- INTEGRACIÓN GOOGLE SHEETS ---
+    // PEGA AQUÍ TU URL DE GOOGLE APPS SCRIPT
+    const googleSheetUrl = "https://script.google.com/macros/s/AKfycbylNIqbY2UFGAeEWFeWF0kv2jjV3otBmO7LIdXnRt3zzQT-H1RxlWsbtmfmFJhWw92tlw/exec"; 
+    
+    let scoreVal = 0;
+    const log = QUESTIONS_RAW.map((q, idx) => {
+      const userStr = (responses[idx] || []).join(" ").toLowerCase();
+      const validVariations = [
+        q.a.join(" "),
+        q.alt?.join(" ")
+      ].filter(Boolean).map(v => v.toLowerCase());
 
-        // --- UTILIDADES ---
-        const normalizeText = (str) => {
-            if (!str) return "";
-            return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-        };
+      const isCorrect = validVariations.includes(userStr);
+      if (isCorrect) scoreVal++;
+      return `${idx + 1}${isCorrect ? 'r' : 'w'}`;
+    }).join(", ");
 
-        // Convertidor PCM a WAV para el audio de Gemini
-        function pcmToWav(base64Data, sampleRate = 24000) {
-            const byteCharacters = atob(base64Data);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) { byteNumbers[i] = byteCharacters.charCodeAt(i); }
-            const byteArray = new Uint8Array(byteNumbers);
-            const buffer = byteArray.buffer;
-            const length = buffer.byteLength;
-            const wavHeader = new ArrayBuffer(44);
-            const view = new DataView(wavHeader);
-            view.setUint32(0, 0x52494646, false); 
-            view.setUint32(4, 36 + length, true); 
-            view.setUint32(8, 0x57415645, false); 
-            view.setUint32(12, 0x666d7420, false); 
-            view.setUint32(16, 16, true); 
-            view.setUint16(20, 1, true); 
-            view.setUint16(22, 1, true); 
-            view.setUint32(24, sampleRate, true); 
-            view.setUint32(28, sampleRate * 2, true); 
-            view.setUint16(32, 2, true); 
-            view.setUint16(34, 16, true); 
-            view.setUint32(36, 0x64617461, false); 
-            view.setUint32(40, length, true); 
-            const combined = new Uint8Array(44 + length);
-            combined.set(new Uint8Array(wavHeader), 0);
-            combined.set(new Uint8Array(buffer), 44);
-            return combined;
-        }
+    const subData = {
+      title: QUIZ_TITLE,
+      date: new Date().toLocaleString(),
+      firstName: form.firstName,
+      lastName: form.lastName,
+      email: form.email,
+      period: form.period,
+      rawScore: scoreVal,
+      displayScore: `${scoreVal}/${QUESTIONS_RAW.length}`,
+      cheatCount: cheatCount,
+      resultsLog: log
+    };
 
-        // --- CONTENIDO EDUCATIVO ---
-        const TENSES = {
-            PRESENT: "Indicative Present",
-            PRETERITE: "Indicative Preterite",
-            CONTINUOUS: "Indicative Present Continuous",
-            FUTURE: "Indicative Informal Future"
-        };
+    try {
+      const emailId = form.email.trim().toLowerCase();
+      
+      // Guardar en Firestore (Backup)
+      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'submissions', emailId), subData);
+      
+      // Enviar a Google Sheets
+      fetch(googleSheetUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        cache: 'no-cache',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(subData)
+      });
 
-        const LEARNING_SLIDES = {
-            [TENSES.PRESENT]: {
-                title: "Poner in the Indicative Present",
-                desc: "The verb 'poner' (to put/place) has an irregular 'Yo' form: 'Pongo'. When putting something on yourself (clothes), use reflexive pronouns: me pongo, te pones, se pone, nos ponemos, se ponen.",
-                examples: [
-                    { s: "Yo pongo la sal en la mesa.", t: "Translation: I put the salt on the table." },
-                    { s: "Él se pone el sombrero.", t: "Translation: He puts the hat on (himself)." }
-                ]
-            },
-            [TENSES.PRETERITE]: {
-                title: "Poner in the Indicative Preterite",
-                desc: "The preterite uses the irregular stem 'pus-'. Puse, pusiste, puso, pusimos, pusieron.",
-                examples: [
-                    { s: "Yo puse la leche en la nevera.", t: "Translation: I put the milk in the fridge." },
-                    { s: "Ellos pusieron las llaves en la mesa.", t: "Translation: They put the keys on the table." }
-                ]
-            },
-            [TENSES.CONTINUOUS]: {
-                title: "Poner in the Present Continuous",
-                desc: "Uses 'Estar + Poniendo'. Action happening now.",
-                examples: [
-                    { s: "Estoy poniendo la mesa.", t: "Translation: I am setting (putting) the table." },
-                    { s: "Él se está poniendo los zapatos.", t: "Translation: He is putting on the shoes." }
-                ]
-            },
-            [TENSES.FUTURE]: {
-                title: "Poner in the Informal Future",
-                desc: "Uses 'Ir + a + Poner'. Examples: voy a poner, vas a poner...",
-                examples: [
-                    { s: "Voy a poner el pedido.", t: "Translation: I am going to put the order in." },
-                    { s: "Ella se va a poner el vestido rojo.", t: "Translation: She is going to put on the red dress." }
-                ]
-            }
-        };
+      setStep('results');
+      downloadCSV(subData);
+    } catch (err) { alert("Error saving results."); }
+    setIsSubmitting(false);
+  };
 
-        const QUESTIONS_RAW = [
-            // PRESENT
-            { type: 'drag', q: "I put the salt on the table.", a: ["Yo", "pongo", "la", "sal", "en", "la", "mesa"], dist: ["puse", "pones", "poniendo"], tense: TENSES.PRESENT },
-            { type: 'mcq', q: "Translation: 'We put the books away.'", a: "Nosotros ponemos los libros.", options: ["Nosotros ponemos los libros.", "Nosotros pusimos los libros.", "Nosotros pongo los libros.", "Nosotros ponen los libros."], tense: TENSES.PRESENT },
-            { type: 'tf', q: "The 'Yo' form of poner in the present is 'Pongo'.", a: "True", tense: TENSES.PRESENT },
-            { type: 'blank', q: "Ustedes ___ (put - present) mucha sal en la comida.", a: ["ponen"], tense: TENSES.PRESENT },
-            { type: 'audio', q: "Identify translation.", audioText: "No pongo nada en la caja.", a: "I don't put anything in the box.", options: ["I put everything inside the wooden box.", "I don't put anything in the box.", "I put nothing at all on the shelf.", "He doesn't put anything in the yellow box."], tense: TENSES.PRESENT },
-            { type: 'drag', q: "Translate: 'He puts the hat on.'", a: ["Él", "se", "pone", "el", "sombrero"], dist: ["puse", "pone", "poniendo"], tense: TENSES.PRESENT },
-            { type: 'drag', q: "Translate: 'Do you (inf) put the clothes in the drawer?'", a: ["¿", "Pones", "tú", "la", "ropa", "en", "el", "cajón", "?"], alt: ["¿", "Pones", "la", "ropa", "en", "el", "cajón", "?"], dist: ["puse", "ponen", "llave"], tense: TENSES.PRESENT },
-            { type: 'mcq', q: "Translate: 'They (f) put on the shoes.'", a: "Ellas se ponen los zapatos.", options: ["Ellas pone los zapatos.", "Ellas se ponen los zapatos.", "Ellas pusimos los zapatos.", "Ellas pongo los zapatos."], tense: TENSES.PRESENT },
-            { type: 'tf', q: "'Se pone' is reflexive.", a: "True", tense: TENSES.PRESENT },
-            { type: 'blank', q: "Él no ___ (put - present) atención en la clase.", a: ["pone"], tense: TENSES.PRESENT },
-            { type: 'audio', q: "Identify audio.", audioText: "¿Qué pones en la mesa?", a: "What do you put on the table?", options: ["What did you put near the dining table?", "What do you put on the table?", "Who is putting the glasses on the table?", "Where do you put the flowers today?"], tense: TENSES.PRESENT },
-            { type: 'drag', q: "We put the sugar in the coffee.", a: ["Nosotros", "ponemos", "el", "azúcar", "en", "el", "café"], dist: ["poniendo", "puse", "ponen"], tense: TENSES.PRESENT },
+  const downloadCSV = (data) => {
+    const headers = ["Title", "Timestamp", "First Name", "Last Name", "Email", "Period", "Score", "Question Log", "Cheat Alerts"];
+    const row = [
+      data.title, data.date, data.firstName, data.lastName, data.email, data.period,
+      `'${data.displayScore}`, data.resultsLog, data.cheatCount
+    ].map(field => `"${field}"`).join(",");
+    const csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + row;
+    const link = document.createElement("a");
+    link.setAttribute("href", encodeURI(csvContent));
+    link.setAttribute("download", `results_${data.firstName}_${data.lastName}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
-            // PRETERITE
-            { type: 'drag', q: "I put the milk in the fridge.", a: ["Yo", "puse", "la", "leche", "en", "la", "nevera"], dist: ["pongo", "pusiste", "poniendo"], tense: TENSES.PRETERITE },
-            { type: 'mcq', q: "They put the boxes in the car.", a: "Ellos pusieron las cajas en el coche.", options: ["Ellos ponen las cajas.", "Ellos pusieron las cajas en el coche.", "Ellos pusimos las cajas.", "Ellos puso las cajas."], tense: TENSES.PRETERITE },
-            { type: 'tf', q: "Stem is 'pus-'.", a: "True", tense: TENSES.PRETERITE },
-            { type: 'blank', q: "Tú ___ (put - preterite) el vaso en el suelo.", a: ["pusiste"], tense: TENSES.PRETERITE },
-            { type: 'audio', q: "Translate audio.", audioText: "No puse el reloj en la mesa.", a: "I didn't put the watch on the table.", options: ["I don't put the silver watch on the desk.", "I didn't put the watch on the table.", "He didn't put the small watch on the table.", "We didn't put the watches near the table."], tense: TENSES.PRETERITE },
-            { type: 'drag', q: "Translate: 'We put the ornaments on the tree.'", a: ["Nosotros", "pusimos", "los", "adornos", "en", "el", "árbol"], dist: ["ponemos", "ponen", "puesto"], tense: TENSES.PRETERITE },
-            { type: 'drag', q: "Did she put the money in the bag?", a: ["¿", "Puso", "ella", "el", "dinero", "en", "la", "bolsa", "?"], alt: ["¿", "Puso", "el", "dinero", "en", "la", "bolsa", "ella", "?"], dist: ["puse", "pone", "bolsa"], tense: TENSES.PRETERITE },
-            { type: 'mcq', q: "Ustedes ___ the baggage.", a: "pusieron", options: ["puso", "pusieron", "pusimos", "ponen"], tense: TENSES.PRETERITE },
-            { type: 'tf', q: "'Pusimos' is 'We'.", a: "True", tense: TENSES.PRETERITE },
-            { type: 'blank', q: "Él se ___ (put on - preterite) su chaqueta.", a: ["puso"], tense: TENSES.PRETERITE },
-            { type: 'audio', q: "Identify.", audioText: "¿Quién puso las llaves aquí?", a: "Who put the keys here?", options: ["Who puts the golden keys in this place?", "Who put the keys here?", "Where did you put the car keys today?", "What is the reason he put the keys here?"], tense: TENSES.PRETERITE },
-            { type: 'drag', q: "We didn't put any obstacles.", a: ["Nosotros", "no", "pusimos", "trabas", "en", "el", "camino"], dist: ["ponen", "puso", "poner"], tense: TENSES.PRETERITE },
-            { type: 'drag', q: "Translate: 'I put the keys on the table.'", a: ["Yo", "puse", "las", "llaves", "en", "la", "mesa"], dist: ["pongo", "pusieron", "sobre"], tense: TENSES.PRETERITE },
+  if (!user) return <div className="h-screen bg-lime-50 flex items-center justify-center font-bold text-lime-600">Verifying Identity...</div>;
 
-            // CONTINUOUS
-            { type: 'drag', q: "I am putting the clothes in the closet.", a: ["Estoy", "poniendo", "la", "ropa", "en", "el", "armario"], dist: ["puse", "pongo", "puesto"], tense: TENSES.CONTINUOUS },
-            { type: 'mcq', q: "Translate: 'They are putting on the movie.'", a: "Están poniendo la película.", options: ["Están puesto la película.", "Están poniendo la película.", "Están ponen la película.", "Están pusimos la película."], tense: TENSES.CONTINUOUS },
-            { type: 'tf', q: "Gerund is 'poniendo'.", a: "True", tense: TENSES.CONTINUOUS },
-            { type: 'blank', q: "Tú ___ (are putting) las flores en el jarrón.", a: ["estás", "poniendo"], tense: TENSES.CONTINUOUS },
-            { type: 'audio', q: "Identify audio.", audioText: "No estamos poniendo música ahora.", a: "We aren't putting music on now.", options: ["We don't put the loud music on the radio.", "We aren't putting music on now.", "They aren't putting the classical music now.", "I'm not putting any music in the living room."], tense: TENSES.CONTINUOUS },
-            { type: 'drag', q: "Translate: 'He is putting the baby in the crib.'", a: ["Él", "está", "poniendo", "al", "bebé", "en", "la", "cuna"], dist: ["puse", "pone", "puesto"], tense: TENSES.CONTINUOUS },
-            { type: 'drag', q: "Are you all putting the chair in the corner?", a: ["¿", "Están", "ustedes", "poniendo", "la", "silla", "en", "la", "esquina", "?"], alt: ["¿", "Están", "poniendo", "ustedes", "la", "silla", "en", "la", "esquina", "?"], dist: ["puse", "ponen", "asiento"], tense: TENSES.CONTINUOUS },
-            { type: 'mcq', q: "Ella ___ the star on the tree.", a: "está poniendo", options: ["está pone", "está puso", "está poniendo", "está ponen"], tense: TENSES.CONTINUOUS },
-            { type: 'tf', q: "'Poniendo' is irregular.", a: "False", tense: TENSES.CONTINUOUS },
-            { type: 'blank', q: "Usted ___ (are putting) las cartas en el buzón.", a: ["está", "poniendo"], tense: TENSES.CONTINUOUS },
-            { type: 'audio', q: "Translate audio.", audioText: "¿Qué estás poniendo en la bolsa?", a: "What are you putting in the bag?", options: ["What did you put inside the school bag?", "What are you putting in the bag?", "Who is putting the heavy books in the bag?", "How are you putting the groceries in the bag?"], tense: TENSES.CONTINUOUS },
-            { type: 'drag', q: "We are setting the table.", a: ["Estamos", "poniendo", "la", "mesa"], dist: ["puse", "puesto", "ponemos"], tense: TENSES.CONTINUOUS },
+  return (
+    <div className="min-h-screen bg-lime-50 font-sans text-slate-800 p-4 md:p-8">
+      {showAlert && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-3xl p-10 max-w-sm text-center shadow-2xl border-4 border-red-500">
+            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-3xl font-black text-slate-900 mb-2 uppercase tracking-tighter">¡ALERTA!</h2>
+            <p className="text-slate-600 mb-6 font-medium">Cambiar de pestaña ha quedado registrado. Por favor, vuelve al examen.</p>
+            <button onClick={() => setShowAlert(false)} className="w-full bg-red-500 text-white font-bold py-4 rounded-2xl shadow-lg">CONTINUAR</button>
+          </div>
+        </div>
+      )}
 
-            // FUTURE
-            { type: 'drag', q: "I am going to put the order in the system.", a: ["Yo", "voy", "a", "poner", "el", "pedido", "en", "el", "sistema"], dist: ["puse", "pongo", "irá"], tense: TENSES.FUTURE },
-            { type: 'mcq', q: "They are going to put more lights.", a: "Van a poner más luces.", options: ["Van a puse más luces.", "Van a poner más luces.", "Van a pongo más luces.", "Van a pondrán más luces."], tense: TENSES.FUTURE },
-            { type: 'tf', q: "Future uses 'ir + a + infinitive'.", a: "True", tense: TENSES.FUTURE },
-            { type: 'blank', q: "Tú ___ (going to put) el cartel en la pared.", a: ["vas", "a", "poner"], tense: TENSES.FUTURE },
-            { type: 'audio', q: "Identify audio.", audioText: "No voy a poner eso en mi mochila.", a: "I'm not going to put that in my backpack.", options: ["I didn't put the blue notebook in my backpack.", "I'm not going to put that in my backpack.", "He is not going to put his toys in my backpack.", "We aren't going to put the lunch in the backpack."], tense: TENSES.FUTURE },
-            { type: 'drag', q: "Translate: 'She is going to put on the red dress.'", a: ["Ella", "se", "va", "a", "poner", "el", "vestido", "rojo"], dist: ["puse", "poniendo", "pone", "azul"], tense: TENSES.FUTURE },
-            { type: 'drag', q: "Translate: 'Are you going to put the code in the door?'", a: ["¿", "Vas", "a", "poner", "el", "código", "en", "la", "puerta", "?"], dist: ["puse", "pongo", "clave"], tense: TENSES.FUTURE },
-            { type: 'mcq', q: "Ustedes ___ a lot of effort.", a: "van a poner", options: ["va a poner", "van a poner", "vamos a poner", "ir a poner"], tense: TENSES.FUTURE },
-            { type: 'tf', q: "'Se va a poner' is correct.", a: "True", tense: TENSES.FUTURE },
-            { type: 'blank', q: "Él ___ (going to put on) los guantes.", a: ["se", "va", "a", "poner"], tense: TENSES.FUTURE },
-            { type: 'audio', q: "Translate audio.", audioText: "¿Van a poner música en la fiesta?", a: "Are they going to put music on at the party?", options: ["Are they putting festive music at the big party?", "Are they going to put music on at the party?", "Did they put the disco music for the party?", "Do they put the soft music during the party?"], tense: TENSES.FUTURE },
-            { type: 'drag', q: "We are going to put the fence.", a: ["Vamos", "a", "poner", "la", "valla", "alrededor", "del", "jardín"], dist: ["puse", "poniendo", "puedo"], tense: TENSES.FUTURE },
-            { type: 'drag', q: "Translate: 'He is going to put the trash out.'", a: ["Él", "va", "a", "poner", "la", "basura", "afuera"], dist: ["puse", "pongo", "dentro"], tense: TENSES.FUTURE }
-        ];
+      <div className="max-w-4xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden border border-lime-100 min-h-[600px] flex flex-col">
+        <div className="bg-lime-500 p-6 text-white flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <GraduationCap className="w-8 h-8" />
+            <h1 className="text-xl font-black uppercase tracking-tighter">{QUIZ_TITLE}</h1>
+          </div>
+          {step === 'quiz' && (
+            <div className="bg-white/20 px-4 py-1 rounded-full text-sm font-bold">
+              Pregunta: {currentIdx + 1} / 50
+            </div>
+          )}
+        </div>
 
-        // --- PROCESAMIENTO ---
-        const QUESTIONS = QUESTIONS_RAW.map((item, idx) => {
-            const safeDist = Array.isArray(item.dist) ? item.dist : [];
-            const safeA = Array.isArray(item.a) ? item.a : [];
-            const safeAlt = Array.isArray(item.alt) ? item.alt : [];
-            let bank = [];
-            if (item.type === 'drag') {
-                bank = [...safeA, ...safeAlt, ...safeDist].map((word, i) => ({ text: word, id: `w-${idx}-${i}` }));
-                bank.sort(() => Math.random() - 0.5);
-            }
-            let shuffledOptions = [];
-            if (item.options) { shuffledOptions = [...item.options].sort(() => Math.random() - 0.5); }
-            return { ...item, id: idx, bank, shuffledOptions };
-        });
+        {step === 'auth' && (
+          <div className="p-10 flex-grow flex flex-col justify-center animate-in fade-in duration-300">
+            <div className="max-w-md mx-auto w-full space-y-6">
+              <div className="text-center mb-8">
+                <h2 className="text-3xl font-black text-slate-900">Registro de Estudiante</h2>
+                <p className="text-slate-500">Usa tu ID escolar o Email para guardar tu nota.</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <input className="w-full p-4 bg-slate-50 border-2 rounded-2xl outline-none focus:border-lime-500" placeholder="Nombre" value={form.firstName} onChange={e => setForm({...form, firstName: e.target.value})} />
+                <input className="w-full p-4 bg-slate-50 border-2 rounded-2xl outline-none focus:border-lime-500" placeholder="Apellido" value={form.lastName} onChange={e => setForm({...form, lastName: e.target.value})} />
+              </div>
+              <input className="w-full p-4 bg-slate-50 border-2 rounded-2xl outline-none focus:border-lime-500" placeholder="Email / ID" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
+              <select className="w-full p-4 bg-slate-50 border-2 rounded-2xl outline-none focus:border-lime-500 font-bold" value={form.period} onChange={e => setForm({...form, period: e.target.value})}>
+                <option value="">Selecciona Periodo...</option>
+                {['1st', 'A2', 'A4', 'B3', 'B4', '5th'].map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+              <button onClick={handleStart} disabled={!form.firstName || !form.lastName || !form.email || !form.period} className="w-full bg-lime-500 text-white font-black py-5 rounded-2xl shadow-xl disabled:bg-slate-200 hover:bg-lime-600 transition-all uppercase tracking-widest">ENTRAR</button>
+            </div>
+          </div>
+        )}
 
-        // --- APP COMPONENT ---
-        function App() {
-            const [user, setUser] = useState(null);
-            const [step, setStep] = useState('auth'); 
-            const [form, setForm] = useState({ firstName: '', lastName: '', email: '', period: '' });
-            const [currentIdx, setCurrentIdx] = useState(0);
-            const [responses, setResponses] = useState({}); 
-            const [cheatCount, setCheatCount] = useState(0);
-            const [showAlert, setShowAlert] = useState(false);
-            const [isSubmitting, setIsSubmitting] = useState(false);
-            const [lastViewedTense, setLastViewedTense] = useState(null);
+        {step === 'learn' && lastViewedTense && (
+          <div className="p-10 flex-grow flex flex-col justify-center text-center space-y-8 animate-in slide-in-from-right duration-500">
+            <h2 className="text-4xl font-black text-lime-600">{LEARNING_SLIDES[lastViewedTense].title}</h2>
+            <div className="max-w-2xl mx-auto bg-slate-50 p-8 rounded-[2rem] border-l-[12px] border-lime-400 text-left shadow-sm">
+              <p className="text-xl leading-relaxed text-slate-700 font-medium mb-6">{LEARNING_SLIDES[lastViewedTense].desc}</p>
+              <div className="space-y-4">
+                {LEARNING_SLIDES[lastViewedTense].examples.map((ex, i) => (
+                  <div key={i} className="bg-white p-4 rounded-xl border border-lime-100 shadow-sm">
+                    <div className="text-lime-700 font-black text-xl mb-1">{ex.s}</div>
+                    <div className="text-slate-500 italic text-sm">{ex.t}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <button onClick={() => setStep('quiz')} className="bg-lime-500 text-white font-black py-5 px-20 rounded-2xl text-xl shadow-2xl hover:bg-lime-600 transition-all uppercase">Siguiente</button>
+          </div>
+        )}
 
-            // Resiliencia de inicio y Auth
-            useEffect(() => {
-                const timer = setTimeout(() => {
-                    if (!user) setUser({ uid: 'local-' + Date.now() });
-                }, 1000);
+        {step === 'quiz' && (
+          <div className="p-8 flex-grow flex flex-col animate-in fade-in duration-300">
+            <div className="flex justify-between items-center mb-8">
+              <span className="bg-lime-100 text-lime-700 px-6 py-2 rounded-full text-xs font-black uppercase border border-lime-200">{QUESTIONS_RAW[currentIdx].tense}</span>
+              <span className="font-black text-slate-300 text-2xl">{currentIdx + 1} / 50</span>
+            </div>
+            <div className="text-center mb-10">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Traduce:</p>
+              <h2 className="text-4xl md:text-5xl font-black text-slate-900 leading-tight">{QUESTIONS_RAW[currentIdx].q}</h2>
+            </div>
+            <div className="min-h-[110px] bg-slate-50 rounded-3xl border-4 border-dotted border-lime-200 mb-10 flex flex-wrap gap-2.5 p-6 items-center justify-center">
+              {(responses[currentIdx] || []).map((word, i) => (
+                <button key={`ans-${i}`} onClick={() => toggleWord(word)} className="bg-lime-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg border-b-4 border-lime-700 active:scale-95">{word}</button>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-3 justify-center mb-auto">
+              {QUESTIONS_RAW[currentIdx].shuffledWords.map((word, i) => {
+                const used = (responses[currentIdx] || []).includes(word);
+                return (
+                  <button key={`word-${i}`} onClick={() => !used && toggleWord(word)} disabled={used} className={`px-6 py-4 rounded-2xl font-bold border-2 transition-all text-xl ${used ? 'bg-slate-50 text-slate-100 border-slate-50 opacity-20' : 'bg-white border-lime-200 text-lime-600 hover:bg-lime-50 shadow-md active:scale-90'}`}>{word}</button>
+                );
+              })}
+            </div>
+            <div className="flex justify-between items-center mt-12 pt-8 border-t-2 border-slate-50">
+              <button onClick={() => currentIdx > 0 && setCurrentIdx(currentIdx-1)} disabled={currentIdx === 0} className="font-black text-slate-300 hover:text-lime-500 transition-colors uppercase tracking-widest">Atrás</button>
+              <button onClick={nextQuestion} disabled={isSubmitting} className="bg-slate-800 text-white px-20 py-5 rounded-3xl font-black shadow-2xl hover:bg-slate-900 transition-all uppercase tracking-widest text-lg">
+                {isSubmitting ? 'GUARDANDO...' : (currentIdx === 49 ? 'FINALIZAR' : 'SIGUIENTE')}
+              </button>
+            </div>
+          </div>
+        )}
 
-                if (window.isFirebaseAvailable && window.auth) {
-                    const unsub = window.auth.onAuthStateChanged(u => { if (u) setUser(u); });
-                    window.auth.signInAnonymously().catch(() => {});
-                    return () => { unsub(); clearTimeout(timer); };
-                } else {
-                    setUser({ uid: 'local-user' });
-                    clearTimeout(timer);
-                }
-            }, []);
-
-            useEffect(() => {
-                const handleVisibility = () => { if (document.hidden && step === 'quiz') { setCheatCount(c => c + 1); setShowAlert(true); } };
-                document.addEventListener("visibilitychange", handleVisibility);
-                return () => document.removeEventListener("visibilitychange", handleVisibility);
-            }, [step]);
-
-            const handleStart = async () => {
-                if (!form.firstName || !form.lastName || !form.email || !form.period || !user) return;
-                if (window.isFirebaseAvailable && window.db && !user.uid.startsWith('local')) {
-                    const emailId = form.email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
-                    try {
-                        const snap = await window.db.doc(`artifacts/${internalAppId}/public/data/submissions/${emailId}`).get();
-                        if (snap.exists) { alert("Ya has enviado este examen."); return; }
-                    } catch (e) {}
-                }
-                setLastViewedTense(QUESTIONS[0].tense);
-                setStep('learn');
-            };
-
-            const toggleWord = (wordObj) => {
-                const currentArr = responses[currentIdx] || [];
-                if (currentArr.some(w => w.id === wordObj.id)) {
-                    setResponses({ ...responses, [currentIdx]: currentArr.filter(w => w.id !== wordObj.id) });
-                } else {
-                    setResponses({ ...responses, [currentIdx]: [...currentArr, wordObj] });
-                }
-            };
-
-            const nextQuestion = () => {
-                const nextIdx = currentIdx + 1;
-                if (nextIdx < QUESTIONS.length) {
-                    const curT = QUESTIONS[currentIdx].tense;
-                    const nxtT = QUESTIONS[nextIdx].tense;
-                    setCurrentIdx(nextIdx);
-                    if (curT !== nxtT) { setLastViewedTense(nxtT); setStep('learn'); }
-                } else { submitQuiz(); }
-            };
-
-            const submitQuiz = async () => {
-                setIsSubmitting(true);
-                let scoreVal = 0;
-                const log = QUESTIONS.map((q, idx) => {
-                    let correct = false;
-                    const res = responses[idx];
-                    if (!res) return `${idx + 1}w`;
-                    if (q.type === 'drag') {
-                        const userStr = normalizeText(res.map(w => w.text).join(" "));
-                        const variations = [q.a.join(" "), q.alt?.join(" ")].filter(Boolean).map(v => normalizeText(v));
-                        correct = variations.includes(userStr);
-                    } else if (q.type === 'blank') {
-                        const userInp = normalizeText(typeof res === 'string' ? res : "");
-                        correct = q.a.map(v => normalizeText(v)).includes(userInp);
-                    } else { correct = normalizeText(res) === normalizeText(q.a); }
-                    if (correct) scoreVal++;
-                    return `${idx + 1}${correct ? 'r' : 'w'}`;
-                }).join(", ");
-
-                const subData = {
-                    title: QUIZ_TITLE, timestamp: new Date().toLocaleString(),
-                    firstName: form.firstName, lastName: form.lastName,
-                    email: form.email, period: form.period,
-                    displayScore: `${scoreVal}/50`, cheatCount, resultsLog: log,
-                    userId: user.uid
-                };
-
-                if (window.isFirebaseAvailable && window.db && !user.uid.startsWith('local')) {
-                    try {
-                        const emailId = form.email.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
-                        await window.db.doc(`artifacts/${internalAppId}/public/data/submissions/${emailId}`).set(subData);
-                    } catch (e) {}
-                }
-                setStep('results');
-                downloadCSV(subData);
-                setIsSubmitting(false);
-            };
-
-            const downloadCSV = (data) => {
-                const headers = ["Titulo", "Fecha", "Nombre", "Apellido", "Email", "Periodo", "Puntaje", "Log", "Trampas"];
-                const row = [data.title, data.timestamp, data.firstName, data.lastName, data.email, data.period, `'${data.displayScore}`, data.resultsLog, data.cheatCount].map(f => `"${f}"`).join(",");
-                const csv = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + row;
-                const link = document.createElement("a");
-                link.setAttribute("href", encodeURI(csv));
-                link.setAttribute("download", `results_poner_${data.lastName}.csv`);
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            };
-
-            // --- FUNCIÓN DE AUDIO ROBUSTA ---
-            const handlePlayAudio = async (text) => {
-                // 1. Intento con Gemini TTS (Alta Calidad)
-                if (apiKey) {
-                    try {
-                        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`, {
-                            method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                contents: [{ parts: [{ text }] }],
-                                generationConfig: {
-                                    responseModalities: ["AUDIO"],
-                                    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } }
-                                }
-                            })
-                        });
-                        const result = await response.json();
-                        const b64 = result.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-                        if (b64) {
-                            const blob = new Blob([pcmToWav(b64)], { type: 'audio/wav' });
-                            const audio = new Audio(URL.createObjectURL(blob));
-                            audio.play();
-                            return; // Éxito
-                        }
-                    } catch (e) {
-                        console.warn("Fallo Gemini TTS, usando WebSpeech Fallback.");
-                    }
-                }
-
-                // 2. Fallback: Web Speech API (Funciona en todos los navegadores online sin clave)
-                if ('speechSynthesis' in window) {
-                    const utterance = new SpeechSynthesisUtterance(text);
-                    utterance.lang = 'es-ES';
-                    // Intentar encontrar una voz de mujer en español si está disponible
-                    const voices = window.speechSynthesis.getVoices();
-                    const spanishVoice = voices.find(v => v.lang.startsWith('es') && v.name.includes('Google')) || voices.find(v => v.lang.startsWith('es'));
-                    if (spanishVoice) utterance.voice = spanishVoice;
-                    window.speechSynthesis.speak(utterance);
-                } else {
-                    alert("Tu navegador no soporta audio.");
-                }
-            };
-
-            useEffect(() => {
-                const handleKey = (e) => { if (e.key === 'Enter') { if (step === 'quiz') nextQuestion(); else if (step === 'learn') setStep('quiz'); } };
-                window.addEventListener('keydown', handleKey);
-                return () => window.removeEventListener('keydown', handleKey);
-            }, [currentIdx, responses, step]);
-
-            if (!user) return <div className="h-screen bg-lime-50 flex items-center justify-center font-bold text-lime-600 animate-pulse text-2xl uppercase tracking-widest px-4 text-center">Iniciando seguridad...</div>;
-
-            const q = QUESTIONS[currentIdx];
-
-            return (
-                <div className="min-h-screen p-4 md:p-8 flex items-center justify-center">
-                    {showAlert && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-                            <div className="bg-white rounded-3xl p-10 max-w-sm text-center shadow-2xl border-4 border-red-500">
-                                <h2 className="text-3xl font-black text-slate-900 mb-2 uppercase">¡ALERTA!</h2>
-                                <p className="text-slate-600 mb-6 font-medium text-lg">No cambies de pestaña.</p>
-                                <button onClick={() => setShowAlert(false)} className="w-full bg-red-500 text-white font-bold py-4 rounded-2xl shadow-lg">Continuar</button>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="max-w-4xl w-full bg-white rounded-3xl shadow-2xl overflow-hidden border border-lime-100 min-h-[600px] flex flex-col relative bg-pattern">
-                        <div className="bg-lime-500 p-6 text-white flex justify-between items-center shadow-md">
-                            <h1 className="text-xl font-black uppercase tracking-widest">{QUIZ_TITLE}</h1>
-                            {step === 'quiz' && <div className="bg-white/20 px-4 py-1 rounded-full text-sm font-bold">Paso {currentIdx + 1} de 50</div>}
-                        </div>
-
-                        {step === 'auth' && (
-                            <div className="p-10 flex-grow flex flex-col justify-center animate-in fade-in">
-                                <div className="max-w-md mx-auto w-full space-y-6">
-                                    <h2 className="text-3xl font-black text-slate-900 text-center uppercase">Ingreso</h2>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <input className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-medium shadow-sm" placeholder="Nombre" value={form.firstName} onChange={e => setForm({...form, firstName: e.target.value})} />
-                                        <input className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-medium shadow-sm" placeholder="Apellido" value={form.lastName} onChange={e => setForm({...form, lastName: e.target.value})} />
-                                    </div>
-                                    <input className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-medium shadow-sm" placeholder="Email Estudiantil" value={form.email} onChange={e => setForm({...form, email: e.target.value})} />
-                                    <select className="w-full p-4 bg-white border-2 border-slate-100 rounded-2xl outline-none focus:border-lime-500 font-bold shadow-sm" value={form.period} onChange={e => setForm({...form, period: e.target.value})}>
-                                        <option value="">Selecciona tu periodo...</option>
-                                        {['1st', 'A2', 'A4', 'B3', 'B4', '5th'].map(p => <option key={p} value={p}>{p}</option>)}
-                                    </select>
-                                    <button onClick={handleStart} disabled={!form.firstName || !form.lastName || !form.email || !form.period} className="w-full bg-lime-500 text-white font-black py-5 rounded-2xl shadow-xl hover:bg-lime-600 transition-all uppercase tracking-widest text-lg">Comenzar</button>
-                                </div>
-                            </div>
-                        )}
-
-                        {step === 'learn' && lastViewedTense && (
-                            <div className="p-10 flex-grow flex flex-col justify-center text-center space-y-8 learning-card">
-                                <h2 className="text-4xl font-black text-lime-600 uppercase tracking-tight">{LEARNING_SLIDES[lastViewedTense].title}</h2>
-                                <div className="bg-white p-8 rounded-3xl border-l-[12px] border-lime-400 text-left shadow-lg">
-                                    <p className="text-xl leading-relaxed text-slate-700 font-medium mb-6">{LEARNING_SLIDES[lastViewedTense].desc}</p>
-                                    <div className="space-y-4">
-                                        {LEARNING_SLIDES[lastViewedTense].examples.map((ex, i) => (
-                                            <div key={i} className="bg-slate-50 p-4 rounded-xl border border-lime-100">
-                                                <div className="text-lime-700 font-black text-xl">{ex.s}</div>
-                                                <div className="text-slate-400 italic text-sm">{ex.t}</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                                <button onClick={() => setStep('quiz')} className="bg-lime-500 text-white font-black py-5 px-20 rounded-2xl text-xl shadow-2xl hover:bg-lime-600 uppercase">Siguiente</button>
-                            </div>
-                        )}
-
-                        {step === 'quiz' && (
-                            <div className="p-8 flex-grow flex flex-col animate-in fade-in">
-                                <div className="flex justify-between items-center mb-6">
-                                    <span className="bg-lime-100 text-lime-700 px-4 py-1 rounded-full text-xs font-black uppercase border border-lime-200">{q.tense}</span>
-                                </div>
-                                <div className="text-center mb-8">
-                                    <h2 className="text-3xl font-black text-slate-900 leading-tight">{q.q}</h2>
-                                </div>
-
-                                {q.type === 'audio' && (
-                                    <div className="flex justify-center mb-8">
-                                        <button onClick={() => handlePlayAudio(q.audioText)} className="bg-slate-800 text-white p-8 rounded-full hover:bg-slate-700 shadow-2xl flex items-center gap-4 active:scale-90 transition-all">
-                                            <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 20 20"><path d="M11 5L6 9H2v2h4l5 4V5zM14.5 10c0-1.5-1-2.5-1-2.5v5s1-1 1-2.5z"/></svg>
-                                            <span className="text-xl font-black uppercase tracking-widest text-white">Play Audio</span>
-                                        </button>
-                                    </div>
-                                )}
-
-                                <div className="flex-grow flex flex-col justify-center">
-                                    {q.type === 'drag' && (
-                                        <>
-                                            <div className="min-h-[110px] bg-white rounded-3xl border-4 border-dotted border-lime-200 mb-8 flex flex-wrap gap-2.5 p-6 items-center justify-center shadow-inner">
-                                                {(responses[currentIdx] || []).map((wordObj) => (
-                                                    <button key={wordObj.id} onClick={() => toggleWord(wordObj)} className="bg-lime-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg text-lg border-b-4 border-lime-700 animate-in zoom-in">{wordObj.text}</button>
-                                                ))}
-                                            </div>
-                                            <div className="flex flex-wrap gap-3 justify-center mb-auto">
-                                                {q.bank.map((wordObj) => {
-                                                    const used = (responses[currentIdx] || []).some(w => w.id === wordObj.id);
-                                                    return <button key={wordObj.id} onClick={() => !used && toggleWord(wordObj)} disabled={used} className={`px-6 py-4 rounded-2xl font-bold border-2 transition-all text-xl shadow-sm ${used ? 'bg-slate-50 text-slate-100 border-slate-50 opacity-20 scale-90' : 'bg-white border-lime-200 text-lime-600 hover:border-lime-500 hover:bg-lime-50'}`}>{wordObj.text}</button>
-                                                })}
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {(q.type === 'mcq' || q.type === 'audio') && (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-auto">
-                                            {q.shuffledOptions.map(opt => (
-                                                <button key={opt} onClick={() => setResponses({...responses, [currentIdx]: opt})} className={`p-6 rounded-2xl font-bold border-4 text-left transition-all text-lg shadow-sm ${responses[currentIdx] === opt ? 'bg-lime-500 text-white border-lime-600 scale-95 shadow-lg' : 'bg-white border-slate-100 text-slate-700 hover:border-lime-200'}`}>{opt}</button>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {q.type === 'tf' && (
-                                        <div className="flex gap-8 justify-center mb-auto pt-10">
-                                            {["True", "False"].map(val => (
-                                                <button key={val} onClick={() => setResponses({...responses, [currentIdx]: val})} className={`px-16 py-10 rounded-3xl font-black text-3xl border-4 transition-all shadow-md ${responses[currentIdx] === val ? 'bg-lime-500 text-white border-lime-600 shadow-xl scale-105' : 'bg-white border-slate-100 text-slate-700 hover:border-slate-50'}`}>{val === "True" ? "CIERTO" : "FALSO"}</button>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {q.type === 'blank' && (
-                                        <div className="mb-auto pt-10 text-center">
-                                            <input 
-                                                className="w-full max-w-lg p-8 text-3xl font-black text-center bg-white border-4 border-lime-200 rounded-[40px] outline-none focus:border-lime-500 text-lime-700 shadow-xl" 
-                                                placeholder="Respuesta..."
-                                                value={responses[currentIdx] || ""}
-                                                onChange={(e) => setResponses({...responses, [currentIdx]: e.target.value})}
-                                            />
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="flex justify-between items-center mt-12 pt-8 border-t-2 border-slate-100">
-                                    <button onClick={() => currentIdx > 0 && setCurrentIdx(currentIdx-1)} disabled={currentIdx === 0} className="font-black text-slate-300 hover:text-lime-500 uppercase tracking-widest disabled:opacity-0 transition-colors">Atrás</button>
-                                    <button onClick={() => {
-                                        if (currentIdx < QUESTIONS.length - 1) nextQuestion();
-                                        else submitQuiz();
-                                    }} disabled={isSubmitting} className="bg-slate-800 text-white px-20 py-5 rounded-3xl font-black shadow-2xl hover:bg-slate-900 transition-all active:scale-95 uppercase tracking-widest text-lg">
-                                        {isSubmitting ? 'Guardando...' : (currentIdx === 49 ? 'Finalizar' : 'Siguiente')}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-
-                        {step === 'results' && (
-                            <div className="p-16 flex-grow flex flex-col justify-center text-center space-y-10 animate-in zoom-in duration-700">
-                                <div className="w-32 h-32 bg-lime-100 rounded-full flex items-center justify-center mx-auto shadow-inner border-4 border-lime-200 animate-bounce">
-                                    <svg className="w-16 h-16 text-lime-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" d="M5 13l4 4L19 7" /></svg>
-                                </div>
-                                <div>
-                                    <h2 className="text-6xl font-black text-slate-900 tracking-tighter uppercase mb-4">¡LOGRADO!</h2>
-                                    <p className="text-2xl text-slate-500 font-medium max-w-lg mx-auto leading-relaxed">Tus resultados han sido guardados.</p>
-                                </div>
-                                <button onClick={() => window.location.reload()} className="max-w-md mx-auto w-full bg-slate-800 text-white py-6 rounded-3xl font-black hover:bg-slate-900 transition-all shadow-2xl uppercase tracking-widest text-xl active:scale-95">Reiniciar</button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            );
-        }
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html>
+        {step === 'results' && (
+          <div className="p-16 flex-grow flex flex-col justify-center text-center space-y-10 animate-in zoom-in duration-700">
+            <h2 className="text-6xl font-black text-slate-900 tracking-tighter uppercase">¡TERMINADO!</h2>
+            <p className="text-2xl text-slate-500 font-medium max-w-lg mx-auto leading-relaxed">Tus resultados han sido enviados a la hoja de notas del profesor y se ha descargado un recibo.</p>
+            <button onClick={() => window.location.reload()} className="max-w-md mx-auto w-full bg-slate-800 text-white py-6 rounded-3xl font-black hover:bg-slate-900 transition-all shadow-2xl uppercase tracking-widest text-xl">Reiniciar</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
